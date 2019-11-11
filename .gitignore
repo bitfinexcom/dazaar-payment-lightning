@@ -1,0 +1,6 @@
+package-lock.json
+node_modules
+regtest
+e1-cli
+e2-cli
+reduce-test.js

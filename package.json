@@ -1,0 +1,38 @@
+{
+  "name": "dazaar-lightning",
+  "version": "1.0.0",
+  "description": "lightning payment api for dazaar stream services",
+  "main": "ligthning.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Christophe Diederichs",
+  "license": "ISC",
+  "dependencies": {
+    "clightning-rpc": "^0.3.2",
+    "eclair-rpc": "0.0.1",
+    "got": "^9.6.0",
+    "grpc": "^1.24.1",
+    "querystring": "^0.2.0",
+    "tape": "^4.11.0",
+    "tape-promise": "^4.0.0",
+    "through2": "^3.0.1",
+    "websocket": "^1.0.30",
+    "ws": "^7.2.0"
+  },
+  "devDependencies": {},
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/chm-diederichs/dazaar-lightning.git"
+  },
+  "keywords": [
+    "lightning",
+    "network",
+    "dazaar",
+    "payment"
+  ],
+  "bugs": {
+    "url": "https://github.com/chm-diederichs/dazaar-lightning/issues"
+  },
+  "homepage": "https://github.com/chm-diederichs/dazaar-lightning#readme"
+}
