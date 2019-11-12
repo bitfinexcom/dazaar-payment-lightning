@@ -1,5 +1,6 @@
 const grpc = require('grpc')
 const through = require('through2')
+const path = require('path')
 const fs = require('fs')
 
 process.env.GRPC_SSL_CIPHER_SUITES = 'HIGH+ECDSA'
@@ -7,12 +8,13 @@ process.env.GRPC_SSL_CIPHER_SUITES = 'HIGH+ECDSA'
 module.exports = class Payment {
   constructor (sellerAddress, users, opts) {
     this.seller = sellerAddress
-    this.received = []
+    this.settled = []
+    this.outstanding = []
     this.sentPayments = []
 
     this.client = lightning(opts)
     this.users = users
-    this.filter = filter(this.settled, sellerAddress, this.users)
+    this.filter = filter(this.settled, this.outstanding, sellerAddress, this.users)
     this.invoiceStream = null
   }
 
@@ -20,9 +22,6 @@ module.exports = class Payment {
     const self = this
     self.invoiceStream = self.client.subscribeInvoices({})
     const str = self.invoiceStream.pipe(self.filter)
-    this.client.getInfo({}, function (err, response) {
-      console.log(response)
-    })
 
     str.on('data', function (data) {
       console.log(data)
@@ -30,12 +29,20 @@ module.exports = class Payment {
     })
   }
 
-  addInvoice (buyer, amount) {
-    this.client.addInvoice({
-      memo: `dazaar:${buyer}:${this.seller}`,
-      value: amount
-    }, function (err, response) {
-      console.log('invoice submitted')
+  async addInvoice (buyer, amount) {
+    const self = this
+
+    return new Promise((resolve, reject) => {
+      this.client.addInvoice({
+        memo: `dazaar:${buyer}:${this.seller}`,
+        value: amount
+      }, function (err, invoice) {
+        if (err) reject(err)
+
+        self.outstanding.push(invoice)
+        console.log('invoice submitted')
+        resolve(invoice)
+      })
     })
   }
 
@@ -45,7 +52,7 @@ module.exports = class Payment {
     })
 
     const expiryTime = userPayments.reduce(timeToExpire(), userPayments[0].timestamp)
-    return expiryTime - Date.subl now() / 1000
+    return expiryTime - Date.now() / 1000
 
 
     function timeToExpire () {
@@ -58,9 +65,31 @@ module.exports = class Payment {
     }
   }
 
-  payInvoice(payment_request) {
-    this.client.sendPayment({
-      payment_request: paymentRequest
+  async payInvoice(paymentRequest) {
+    const self = this
+
+    return new Promise((resolve, reject) => {
+      this.client.decodePayReq({
+        pay_req: paymentRequest
+      }, function (err, details) {
+        if (err) reject(err)
+
+        // invoice verification
+        if (!details.description.split(':')[0] === 'dazaar') {
+          reject('unrecognized invoice.')
+        }
+
+        const call = self.client.sendPayment()
+
+        call.write({
+          payment_request: paymentRequest
+        })
+
+        call.on('data', function (payment) {
+          call.end()
+          resolve(payment)
+        })
+      })
     })
   }
 
@@ -77,23 +106,50 @@ module.exports = class Payment {
 }
 
 function lightning (opts) {
-  const lndCert = fs.readFileSync(opts.tlsCertPath)
-  const credentials = grpc.credentials.createSsl(lndCert)
+  // load macaroon from .lnd directory
+  const macaroonPath = path.join(opts.lnddir, 'data', 'chain', 'bitcoin', opts.network, 'admin.macaroon')
+  const m = fs.readFileSync(macaroonPath)
+  const macaroon = m.toString('hex')
+
+  // build metadata credentials
+  const metadata = new grpc.Metadata()
+  metadata.add('macaroon', macaroon)
+  const macaroonCreds = grpc.credentials.createFromMetadataGenerator((_args, callback) => {
+    callback(null, metadata)
+  })
+
+  // build ssl credentials
+  const tlsCertPath = path.join(opts.lnddir, 'tls.cert')
+  const lndCert = fs.readFileSync(tlsCertPath)
+  const sslCreds = grpc.credentials.createSsl(lndCert)
+
+  // combine cert credentials and macaroon auth credentials
+  const credentials = grpc.credentials.combineChannelCredentials(sslCreds, macaroonCreds)
+
+  // pass the credentials when creating a channel
   const lnrpcDescriptor = grpc.load(opts.rpcProtoPath)
   const lnrpc = lnrpcDescriptor.lnrpc
   return new lnrpc.Lightning(opts.port, credentials)
 }
 
-function filter (settled, address, users) {
+function macaroon (lndDir) {
+  const macaroonPath = path.join(opts.lnddir, 'data', 'chain', 'bitcoin', opts.network, 'admin.macaroon')
+  const m = fs.readFileSync(macaroonPath)
+  const macaroon = m.toString('hex')
+
+  const metadata = new grpc.meta
+}
+
+function filter (settled, outstanding, address, users) {
   return tr = through({ objectMode: true }, function (invoice, _, next) {
     const details = invoice.memo.split(':')
 
     if (details[0] == 'dazaar') {
       if (details[2] === address) {
         if (invoice.settle_date === '0') {
-          if (!users.includes(details[1])) users.push(details[1])
-
-          this.push(invoice.payment_request)
+          if (!users.includes(details[1])) {
+            users.push(details[1])
+          }
         } else if (users.includes(details[1])) {
           settled.push({
             ref: invoice.memo,
@@ -101,7 +157,10 @@ function filter (settled, address, users) {
             timestamp: parseInt(invoice.settle_date)
           })
 
-          this.push(settled.slice().pop())
+          // console.log(invoice, outstanding[0])
+          const outstandingIndex = outstanding.findIndex(outstanding => {
+            return outstanding.payment_request === invoice.payment_request })
+          outstanding.splice(outstandingIndex, 1)
         }
       }
     }

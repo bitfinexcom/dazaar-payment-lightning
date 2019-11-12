@@ -1,4 +1,5 @@
 const CLightning = require('@jbaczuk/c-lightning-rpc')
+const sodium = require('sodium-native')
 
 module.exports = class Payment {
   constructor (sellerAddress, users, opts) {
@@ -15,39 +16,57 @@ module.exports = class Payment {
     const self = this
 
     // .then(info => console.log(JSON.parse(info).result))
-    self.client.listchannels().then(console.log)
-    self.addInvoice('buyer', 2000)
+    return self.client.listchannels()
+    // self.addInvoice('buyer', 2000)
   }
 
-  addInvoice (buyer, amount) {
+  async addInvoice (buyer, amount) {
     const self = this
     
-    const label = Date.now()
+    // generate unique label per invoice
+    const tag = `${buyer}:${Date.now()}`
+    const labelBuf = Buffer.alloc(sodium.crypto_generichash_BYTES)
+    sodium.crypto_generichash(labelBuf, Buffer.from(tag))
+    const label = labelBuf.toString('base64')
+
     const amountMsat = amount * 1000
     const description = `dazaar:${buyer}:${this.seller}`
     
-    this.client.invoice(amountMsat, label, description)
+    return this.client.invoice(amountMsat, label, description)
       .then(response => {
-        const invoice = JSON.parse(response).result
-
-        self.outstanding.push(invoice)
-        console.log('invoice submitted')
-        console.log(label)
-
+        // set client to listen for payment and
+        // mark the invoice as received upon payment
         self.client.waitinvoice(label).then(response => {
+
           const payment = JSON.parse(response).result
           self.received.push({
             ref: payment.description,
             amount: parseInt(payment.msatoshi) / 1000,
             timestamp: parseInt(payment.paid_at)
           })
+
+          // find index of the outstanding invoice being paid
+          const outstandingIndex = self.outstanding.findIndex((invoice) => {
+            return invoice.payment_hash === payment.payment_hash
+          })
+          
+          // remove invoice from outstanding invoices
+          self.outstanding.splice(outstandingIndex, 1)
         })
+
+        // parse invoice
+        const invoice = JSON.parse(response).result
+
+        // mark the invoice as outstanding
+        self.outstanding.push(invoice)
+        console.log('invoice submitted')
+
+        return invoice
       })
   }
 
   validate (rate, user) {
     if (!this.received.length) return 0
-    console.log(this.received)
     const userPayments = this.received.filter(function (invoice) {
       return (invoice.ref.split(':')[1] === user)
     })
