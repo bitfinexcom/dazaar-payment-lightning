@@ -116,7 +116,7 @@ ptest('lnd -> lnd dazaar payment', async t => {
   }
 
   const lndOpts2 = {
-    lnddir: './.lnd2',
+    lnddir: './.lnd1',
     rpcProtoPath: 'rpc.proto',
     port: 'localhost:13009',
     network: 'regtest'
@@ -148,6 +148,49 @@ ptest('lnd -> lnd dazaar payment', async t => {
   timeLeft.push(lndPay1.validate(2, buyerId))
   await delay(200)
   timeLeft.push(lndPay1.validate(2, buyerId))
+
+  t.assert(timeLeft[1] > 0)
+  t.assert(timeLeft[0] > timeLeft[1])
+
+  await delay(100)
+  t.end()
+})
+
+ptest('c-lightning -> c-lightning dazaar payment', async t => {
+  const cLightningOpts1 = {
+    lightningdPath: './.c-lightning-regtest/lightning-rpc'
+  }
+
+  const cLightningOpts2 = {
+    lightningdPath: './.c-lightning-regtest1/lightning-rpc'
+  }
+
+  const sellerId = 'seller'
+  const buyerId = 'buyer'
+
+  const cPay1 = new cLightning(sellerId, [buyerId], cLightningOpts1)
+  const cPay2 = new cLightning(sellerId, [buyerId], cLightningOpts2)
+
+  await Promise.all([
+    cPay1.init(),
+    cPay2.init()
+  ])
+
+  const invoice = await cPay1.addInvoice(buyerId, 2000)
+
+  t.assert(cPay1.outstanding.length === 1)
+  t.deepEqual(cPay1.outstanding[0], invoice)
+
+  await cPay2.payInvoice(invoice.bolt11)
+  await delay(200)
+
+  t.assert(cPay1.outstanding.length === 0)
+  // setTimeout(() => console.log(cPay1.validate(0.2, buyerId)), 1000)
+  const timeLeft  = []
+
+  timeLeft.push(cPay1.validate(2, buyerId))
+  await delay(200)
+  timeLeft.push(cPay1.validate(2, buyerId))
 
   t.assert(timeLeft[1] > 0)
   t.assert(timeLeft[0] > timeLeft[1])

@@ -1,0 +1,7 @@
+network=regtest
+log-level=debug
+addr=localhost:9730
+bitcoin-rpcuser=lnd
+bitcoin-rpcpassword=password
+daemon
+
