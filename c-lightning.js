@@ -1,4 +1,4 @@
-const CLightning = require('@jbaczuk/c-lightning-rpc')
+const unixson = require('unixson')
 const sodium = require('sodium-native')
 
 module.exports = class Payment {
@@ -8,15 +8,15 @@ module.exports = class Payment {
     this.outstanding = []
     this.sentPayments = []
 
-    this.client = new CLightning(opts.lightningdPath)
+    this.client = unixson(opts.lightningdPath)
     this.users = users
   }
 
   async init () {
     const self = this
 
-    // .then(info => console.log(JSON.parse(info).result))
-    return self.client.listchannels()
+    // const invoices = await self.client.listinvoices()
+    // const dazaarInvoices = invoices.result.invoices()
     // self.addInvoice('buyer', 2000)
   }
 
@@ -36,9 +36,8 @@ module.exports = class Payment {
       .then(response => {
         // set client to listen for payment and
         // mark the invoice as received upon payment
-        self.client.waitinvoice(label).then(response => {
-
-          const payment = JSON.parse(response).result
+        self.client.waitinvoice(label).then(res => {
+          const payment = res.result
           self.received.push({
             ref: payment.description,
             amount: parseInt(payment.msatoshi) / 1000,
@@ -52,10 +51,10 @@ module.exports = class Payment {
           
           // remove invoice from outstanding invoices
           self.outstanding.splice(outstandingIndex, 1)
-        })
+        }).catch(console.error)
 
         // parse invoice
-        const invoice = JSON.parse(response).result
+        const invoice = response.result
 
         // mark the invoice as outstanding
         self.outstanding.push(invoice)
@@ -63,17 +62,19 @@ module.exports = class Payment {
 
         return invoice
       })
-  }
+  } 
 
   validate (rate, user) {
-    if (!this.received.length) return 0
+    if (!this.received.length) throw new Error('no time left')
     const userPayments = this.received.filter(function (invoice) {
       return (invoice.ref.split(':')[1] === user)
     })
 
     const expiryTime = userPayments.reduce(timeToExpire, userPayments[0].timestamp)
-    return expiryTime - Date.now() / 1000
+    const timeLeft = expiryTime - Date.now() / 1000
 
+    if (timeLeft <= 0) throw new Error('no time left.')
+    return timeLeft
 
     function timeToExpire (expiry, payment, index) {
       const timeAdded = (payment.amount / rate)
@@ -87,6 +88,7 @@ module.exports = class Payment {
     const self = this
     self.client.pay(paymentRequest)
       .then(self.sentPayments.push(paymentRequest))
+      .catch(console.error)
   }
 
   earnings () {

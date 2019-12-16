@@ -1,15 +1,17 @@
-const lnd = require('./lightning.js')
+const lnd = require('./lnd.js')
 const cLightning = require('./c-lightning.js')
 const e = require('./eclair.js')
 const test = require('tape')
 const ptape = require('tape-promise').default
 const assert = require('nanoassert')
+const lndRpc = require('./lnd-grpc.js')
+const grpc = require('grpc')
 const ptest = ptape(test)
 
 lndOpts = {
   tlsCertPath: '../lightning-test/.lnd1/tls.cert',
   rpcProtoPath: 'rpc.proto',
-  port: 'localhost:10009'
+  port: 'localhost:12009'
 }
 
 cLightningOpts = {
@@ -22,6 +24,23 @@ eOpts1 = {
   path: '/',
   password: 'password'
 }
+
+const lndOpts1 = {
+  lnddir: './.lnd',
+  rpcProtoPath: 'rpc.proto',
+  port: 'localhost:12009',
+  network: 'regtest'
+}
+
+const lndOpts2 = {
+  lnddir: './.lnd1',
+  rpcProtoPath: 'rpc.proto',
+  port: 'localhost:13009',
+  network: 'regtest'
+}
+
+const lightningRpc1 = lndRpc(lndOpts1)
+const lightningRpc2 = lndRpc(lndOpts2)
 
 // const cpay = new cLightning('seller', ['buyer'], cLightningOpts)
 // const pay = new lnd ('seller', ['buyer'], lndOpts)
@@ -65,16 +84,18 @@ ptest.skip('eclair nodes connecting and pay eachother', async t => {
   ptest.end()
 })
 
-ptest('create lnd client', async t => {
+ptest.skip('create lnd client', async t => {
+
   lndOpts = {
-    lnddir: './.lnd',
+    lnddir: './.lnd1',
     rpcProtoPath: 'rpc.proto',
-    port: 'localhost:12009',
+    port: 'localhost:13009',
     network: 'regtest'
   }
 
-  const pay = new lnd('seller', ['buyer'], lndOpts)
-
+  const pay = new lnd('seller', ['buyer'], lightningRpc1)
+  pay.update(() => console.log(pay.pending))
+  console.log(pay.pending)
   // await pay.init()
   t.assert(pay, 'client is created')
   t.deepEqual(pay.seller, 'seller', 'seller address correctly loaded')
@@ -87,9 +108,9 @@ ptest('create lnd client', async t => {
   t.end()
 })
 
-ptest('create c-lightning client', async t => {
+ptest.skip('create c-lightning client', async t => {
   cLightningOpts = {
-    lightningdPath: './.c-lightning-regtest/lightning-rpc'
+    lightningdPath: './.c1/regtest/lightning-rpc'
   }
 
   const cpay = new cLightning('seller', ['buyer'], cLightningOpts)
@@ -107,7 +128,7 @@ ptest('create c-lightning client', async t => {
   t.end()
 })
 
-ptest('lnd -> lnd dazaar payment', async t => {
+test('lnd -> lnd dazaar payment', async t => {
   const lndOpts1 = {
     lnddir: './.lnd',
     rpcProtoPath: 'rpc.proto',
@@ -125,44 +146,46 @@ ptest('lnd -> lnd dazaar payment', async t => {
   const sellerId = 'seller'
   const buyerId = 'buyer'
 
-  const lndPay1 = new lnd(sellerId, [buyerId], lndOpts1)
-  const lndPay2 = new lnd(sellerId, [buyerId], lndOpts2)
+  const lndPay1 = new lnd(sellerId, [buyerId], lightningRpc1)
+  const lndPay2 = new lnd(sellerId, [buyerId], lightningRpc2)
 
-  await Promise.all([
-    lndPay1.init(),
-    lndPay2.init()
-  ])
+  lndPay1.init()
+  lndPay2.init()
+  // lndPay1.update()
 
-  const invoice = await lndPay1.addInvoice(buyerId, 2000)
+  t.throws(() => lndPay1.validate(2, buyerId))
+  lndPay1.addInvoice(buyerId, 2000, function (err, invoice) {
+    if (err) throw err
 
-  t.assert(lndPay1.outstanding.length === 1)
-  t.deepEqual(lndPay1.outstanding[0], invoice)
+    t.assert(lndPay1.pending.length === 1)
+    t.deepEqual(lndPay1.pending[0], invoice)
 
-  await lndPay2.payInvoice(invoice.payment_request)
-  await delay(200)
+    lndPay2.payInvoice(invoice.payment_request, function (err, payment) {
+      if (err) throw err
+      setTimeout(() => {
+        t.assert(lndPay1.pending.length === 1)
+        // setTimeout(() => console.log(lndPay1.validate(0.2, buyerId)), 1000)
 
-  t.assert(lndPay1.outstanding.length === 0)
-  // setTimeout(() => console.log(lndPay1.validate(0.2, buyerId)), 1000)
-  const timeLeft  = []
+        lndPay1.validate(2, buyerId, function (err, t1) {
+          setTimeout(() => lndPay1.validate(2, buyerId, function (err, t2) {
+            t.assert(t2 > 0)
+            t.assert(t1 > t2)
 
-  timeLeft.push(lndPay1.validate(2, buyerId))
-  await delay(200)
-  timeLeft.push(lndPay1.validate(2, buyerId))
-
-  t.assert(timeLeft[1] > 0)
-  t.assert(timeLeft[0] > timeLeft[1])
-
-  await delay(100)
-  t.end()
+            t.end()
+          }), 200)
+        })
+      }, 200)
+    })  
+  })
 })
 
 ptest('c-lightning -> c-lightning dazaar payment', async t => {
   const cLightningOpts1 = {
-    lightningdPath: './.c-lightning-regtest/lightning-rpc'
+    lightningdPath: './.c1/regtest/lightning-rpc'
   }
 
   const cLightningOpts2 = {
-    lightningdPath: './.c-lightning-regtest1/lightning-rpc'
+    lightningdPath: './.c2/regtest/lightning-rpc'
   }
 
   const sellerId = 'seller'
@@ -175,8 +198,11 @@ ptest('c-lightning -> c-lightning dazaar payment', async t => {
     cPay1.init(),
     cPay2.init()
   ])
+  
+  t.throws(() => cPay1.validate(2, buyerId))
 
   const invoice = await cPay1.addInvoice(buyerId, 2000)
+  // await delay(200)
 
   t.assert(cPay1.outstanding.length === 1)
   t.deepEqual(cPay1.outstanding[0], invoice)
@@ -194,13 +220,11 @@ ptest('c-lightning -> c-lightning dazaar payment', async t => {
 
   t.assert(timeLeft[1] > 0)
   t.assert(timeLeft[0] > timeLeft[1])
-
-  await delay(100)
   t.end()
 })
 
 
-ptest('lnd -> c-lightning dazaar payment', async t => {
+ptest.skip('lnd -> c-lightning dazaar payment', async t => {
   const lndOpts = {
     lnddir: './.lnd',
     rpcProtoPath: 'rpc.proto',
@@ -209,7 +233,7 @@ ptest('lnd -> c-lightning dazaar payment', async t => {
   }
 
   const cLightningOpts = {
-    lightningdPath: './.c-lightning-regtest/lightning-rpc'
+    lightningdPath: './.c1/lightning-rpc'
   }
 
   const sellerId = 'seller'
@@ -246,7 +270,7 @@ ptest('lnd -> c-lightning dazaar payment', async t => {
   t.end()
 })
 
-ptest('c-lightning -> lnd dazaar payment', async t => {
+ptest.skip('c-lightning -> lnd dazaar payment', async t => {
   const lndOpts = {
     lnddir: './.lnd',
     rpcProtoPath: 'rpc.proto',
@@ -301,27 +325,3 @@ function delay (time) {
     }, time)
   })
 }
-
-  // cpay.init().then(() => {
-  //   process.stdin.on('data', function (data) {
-  //     if (data.toString() === 'validate\n') { 
-  //       console.log(cpay.validate(20, 'buyer'))
-  //     } else if (data.toString() === 'earnings\n') {
-  //       console.log(cpay.earnings())
-  //     } else {
-  //       cpay.addInvoice('buyer', parseInt(data))
-  //     }
-  //   })
-  // })
-
-// pay.init().then(() => {
-//   process.stdin.on('data', function (data) {
-//     if (data.toString() === 'validate\n') { 
-//       console.log(pay.validate(20, 'buyer'))
-//     } else if (data.toString() === 'earnings\n') {
-//       console.log(pay.earnings())
-//     } else {
-//       pay.addInvoice('buyer', parseInt(data))
-//     }
-//   })
-// })
