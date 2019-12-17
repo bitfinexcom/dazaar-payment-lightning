@@ -1,169 +1,107 @@
-const grpc = require('grpc')
-const through = require('through2')
-const path = require('path')
-const fs = require('fs')
+const lnd = require('./lnd.js')
+const metadata = require('../dazaar-payment/metadata')
+const cLightning = require('./c-lightning.js')
 
-process.env.GRPC_SSL_CIPHER_SUITES = 'HIGH+ECDSA'
+const MAX_SUBSCRIBER_CACHE = 500
 
-module.exports = class Payment {
-  constructor (sellerAddress, users, opts) {
-    this.seller = sellerAddress
-    this.settled = []
-    this.outstanding = []
-    this.sentPayments = []
-
-    this.client = lightning(opts)
-    this.users = users
-    this.filter = filter(this.settled, this.outstanding, sellerAddress, this.users)
-    this.invoiceStream = null
+module.exports = class DazaarLightningPayment {
+  constructor (seller, payment, opts = {}) {
+    this.seller = seller
+    this.payment = payment
+    this.lightning = node(seller, opts)
+    this.subscribers = new Map()
+    this.destroyed = false
   }
 
-  async init () {
-    const self = this
-    self.invoiceStream = self.client.subscribeInvoices({})
-    const str = self.invoiceStream.pipe(self.filter)
-
-    str.on('data', function (data) {
-      console.log(data)
-      if (data.timestamp) console.log(self.validate(20, 'buyer'))
-    })
+  init () {
+    this.lightning.init()
   }
 
-  async addInvoice (buyer, amount) {
-    const self = this
+  validate (buyer, cb) {
+    if (this.destroyed) return process.nextTick(cb, newError('Seller is shutting down'))
+    const tail = this._get(buyer)
 
-    return new Promise((resolve, reject) => {
-      this.client.addInvoice({
-        memo: `dazaar:${buyer}:${this.seller}`,
-        value: amount
-      }, function (err, invoice) {
-        if (err) reject(err)
+    const timeout = setTimeout(ontimeout, 20000)
+    let timedout = false
+    if (tail.synced || tail.active()) return process.nextTick(onsynced)
 
-        self.outstanding.push(invoice)
-        console.log('invoice submitted')
-        resolve(invoice)
+    tail.on('synced', onsynced)
+    tail.on('update', onupdate)
+
+    function ontimeout () {
+      timedout = true
+      onsynced()
+    }
+
+    function onupdate () {
+      if (tail.active()) onsynced()
+    }
+
+    function onsynced () {
+      tail.removeListener('synced', onsynced)
+      tail.removeListener('update', onupdate)
+      clearTimeout(timeout)
+
+      const time = tail.remainingTime()
+      console.log(tail.remainingTime(), 'tailtime')
+      if (time <= 0) return cb(new Error('No time left on subscription' + (timedout ? 'after timeout' : '')))
+
+      cb(null, {
+        type: 'time',
+        remaining: time
       })
-    })
-  }
-
-  validate (rate, user) {
-    const userPayments = this.settled.filter(function (invoice) {
-      return (invoice.ref.split(':')[1] === user)
-    })
-
-    const expiryTime = userPayments.reduce(timeToExpire(), userPayments[0].timestamp)
-    return expiryTime - Date.now() / 1000
-
-
-    function timeToExpire () {
-      return function (expiry, payment, index) {
-        const timeAdded = (payment.amount / rate)
-        if (payment.timestamp > expiry) return payment.timestamp + timeAdded
-
-        return expiry + timeAdded
-      }
     }
   }
 
-  async payInvoice(paymentRequest) {
+  buy (buyer, amount, auth, cb) {
+    // requestInovice(amount, function (err, invoice))
+
+    function shouldIPay () {
+
+    }
+  }
+
+  destroy () {
+    if (this.destroyed) return
+    this.destroyed = true
+
+    for (const tail of this.subscribers.values()) {
+      tail.destroy()
+    }
+  }
+
+  _filter (buyer) {
+    return metadata(this.seller, buyer)
+  }
+
+  _get (buyer) {
+    const h = buyer.toString('hex')
+    if (this.subscribers.has(h)) return this.subscribers.get(h)
+    if (this.subscribers.size >= MAX_SUBSCRIBER_CACHE) this._gc()
+
     const self = this
+    const tail = this.lightning.subscription(this._filter(buyer), this.payment)
+    this.subscribers.set(h, tail)
 
-    return new Promise((resolve, reject) => {
-      this.client.decodePayReq({
-        pay_req: paymentRequest
-      }, function (err, details) {
-        if (err) reject(err)
-
-        // invoice verification
-        if (!details.description.split(':')[0] === 'dazaar') {
-          reject('unrecognized invoice.')
-        }
-
-        const call = self.client.sendPayment()
-
-        call.write({
-          payment_request: paymentRequest
-        })
-
-        call.on('data', function (payment) {
-          call.end()
-          resolve(payment)
-        })
-      })
-    })
+    return tail
   }
 
-  earnings () {
-    const earnings = {}
-    for (let user of this.users) {
-      earnings[user] = this.settled.reduce(function (acc, payment) {
-        if (payment.ref.split(':')[1] !== user) return acc
-        return acc + payment.amount
-      }, 0)
+  _gc () {
+    for (const [h, tail] of this.subscribers) {
+      tail.destroy()
+      this.subscribers.delete(h)
+      return
     }
-    return earnings
+  }
+
+  static supports (payment) {
+    return payment.currency === 'LightningBTC'
   }
 }
 
-function lightning (opts) {
-  // load macaroon from .lnd directory
-  const macaroonPath = path.join(opts.lnddir, 'data', 'chain', 'bitcoin', opts.network, 'admin.macaroon')
-  const m = fs.readFileSync(macaroonPath)
-  const macaroon = m.toString('hex')
+function node (seller, opts) {
+  if (opts.implementation === 'lnd') return new lnd(seller, opts.rpc)
+  if (opts.implementation === 'c-lightning') return new cLightning(seller, opts.rpc)
 
-  // build metadata credentials
-  const metadata = new grpc.Metadata()
-  metadata.add('macaroon', macaroon)
-  const macaroonCreds = grpc.credentials.createFromMetadataGenerator((_args, callback) => {
-    callback(null, metadata)
-  })
-
-  // build ssl credentials
-  const tlsCertPath = path.join(opts.lnddir, 'tls.cert')
-  const lndCert = fs.readFileSync(tlsCertPath)
-  const sslCreds = grpc.credentials.createSsl(lndCert)
-
-  // combine cert credentials and macaroon auth credentials
-  const credentials = grpc.credentials.combineChannelCredentials(sslCreds, macaroonCreds)
-
-  // pass the credentials when creating a channel
-  const lnrpcDescriptor = grpc.load(opts.rpcProtoPath)
-  const lnrpc = lnrpcDescriptor.lnrpc
-  return new lnrpc.Lightning(opts.port, credentials)
-}
-
-function macaroon (lndDir) {
-  const macaroonPath = path.join(opts.lnddir, 'data', 'chain', 'bitcoin', opts.network, 'admin.macaroon')
-  const m = fs.readFileSync(macaroonPath)
-  const macaroon = m.toString('hex')
-
-  const metadata = new grpc.meta
-}
-
-function filter (settled, outstanding, address, users) {
-  return tr = through({ objectMode: true }, function (invoice, _, next) {
-    const details = invoice.memo.split(':')
-
-    if (details[0] == 'dazaar') {
-      if (details[2] === address) {
-        if (invoice.settle_date === '0') {
-          if (!users.includes(details[1])) {
-            users.push(details[1])
-          }
-        } else if (users.includes(details[1])) {
-          settled.push({
-            ref: invoice.memo,
-            amount: parseInt(invoice.value),
-            timestamp: parseInt(invoice.settle_date)
-          })
-
-          // console.log(invoice, outstanding[0])
-          const outstandingIndex = outstanding.findIndex(outstanding => {
-            return outstanding.payment_request === invoice.payment_request })
-          outstanding.splice(outstandingIndex, 1)
-        }
-      }
-    }
-    next()
-  })
+  throw new Error('unrecognised lightning node: specify lnd or c-lightning.')
 }

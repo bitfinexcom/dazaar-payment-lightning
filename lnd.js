@@ -1,93 +1,130 @@
 const lndGrpc = require('./lnd-grpc')
 const through = require('through2')
 const path = require('path')
+const { EventEmitter } = require('events')
 const protoLoader = require('@grpc/proto-loader')
 const fs = require('fs')
 
 process.env.GRPC_SSL_CIPHER_SUITES = 'HIGH+ECDSA'
 
 module.exports = class Payment {
-  constructor (sellerAddress, users, lndRpc) {
+  constructor (sellerAddress, lndRpc) {
     this.seller = sellerAddress
     this.settled = []
     this.pending = []
     this.sentPayments = []
 
     this.client = lndRpc
-    this.users = users
-    this.filter = filter(this.settled, this.pending, sellerAddress, this.users)
-    this.invoiceStream = null
+    this.users = null
+    // this.filter = filter(this.settled, this.pending, sellerAddress, this.users)
+    this.invoiceStream = this.client.subscribeInvoices({})
     this.lastIndex = 0
   }
 
-  init () {
+  init (cb) {
     const self = this
-    const invoiceStream = this.client.subscribeInvoices({})
-
-    invoiceStream.on('data', function (invoice) {
-      const [label, buyer, seller] = invoice.memo.split(':')
-      if (label !== 'dazaar') return
-
-      if (seller === self.seller) {
-        if (invoice.settled) {
-          if (self.users.includes(buyer)) {
-            self.settled.push({
-              user: buyer,
-              ref: invoice.memo,
-              amount: parseInt(invoice.value),
-              timestamp: parseInt(invoice.settle_date)
-            })
-
-            const index = self.pending.findIndex(item => {
-              return item.payment_request === invoice.payment_request
-            })
-            self.pending.splice(index, 1)
-
-            self.addInvoice(buyer, parseInt(invoice.value))
-          }
-        } else if (!self.users.includes(buyer)) {
-          self.users.push(buyer)  
-        }
-      }
-    })
+    const invoiceStream = this.client.subscribeInvoices({}, cb)
 
     invoiceStream.on('end', function () {
       self.lastIndex = self.invoices.slice.pop().add_index
     })
   }
 
-  update (cb) {
-    if (!cb) cb = noop
+  subscription (filter, rate) {
     const self = this
+    let perSecond = 0
 
-    this.client.listInvoices({}, function (err, res) {
-      if (err) cb(err)
+    if (typeof rate === 'object' && rate) { // dazaar card
+      perSecond = convertDazaarPayment(rate)
+    } else {
+      const match = rate.trim().match(/^(\d(?:\.\d+)?)\s*BTC\s*\/\s*s$/i)
+      if (!match) throw new Error('rate should have the form "n....nn BTC/s"')
+      perSecond = Number(match[1])
+    }
+
+    const sub = new EventEmitter()
+
+    const activePayments = []
+
+    sub.synced = false
+    sync(filter, activePayments)
+
+    this.invoiceStream.on('data', filterInvoice)
+
+    sub.active = function (minSeconds) {
+      return sub.remainingFunds(minSeconds) > 0
+    }
+
+    sub.destroy = function () {
+      sub.removeListener('data', filterInvoice)
+    }
+
+    sub.remainingTime = function (minSeconds) {
+      const funds = sub.remainingFunds(minSeconds)
+      return Math.floor(Math.max(0, funds / perSecond))
+    }
+
+    sub.remainingFunds = function (minSeconds) {
+      if (!minSeconds) minSeconds = 0
+
+      const now = Math.floor(Date.now() / 1000) + minSeconds 
+      const funds = activePayments.reduce(leftoverFunds, 0)
       
-      const dazaarPayments = res.filter(invoice =>
-        invoice.memo.split(':')[0] === 'dazaar')
+      return funds
 
-      self.settled = dazaarPayments
-        .filter(invoice => invoice.settled)
-        .map(invoice => ({
-          ref: invoice.memo,
-          amount: parseInt(invoice.value),
-          timestamp: parseInt(invoice.settle_date)
+      function leftoverFunds (funds, payment, i) {
+        const nextTime = i + 1 < activePayments.length ? activePayments[i + 1].time : now
+
+        const consumed = perSecond * (nextTime - payment.time)
+        funds += fromSats(payment.amount) - consumed
+
+        return funds > 0 ? funds : 0
+      }
+    }
+
+    return sub
+
+    function filterInvoice (invoice) {
+      if (invoice.memo !== filter || !invoice.settled) return
+
+      const amount = parseInt(invoice.value)
+      const time = parseInt(invoice.settle_date)
+
+      activePayments.push({ amount, time })
+
+      sub.emit('update')
+
+      // repeat invoice
+      self.addInvoice(filter, amount, relayToBuyer)
+    }
+
+    function sync () {
+      self.client.listInvoices({}, function (err, res) {
+        // CHECK: error handling
+        if (err) throw err
+
+        const dazaarPayments = res.invoices
+          .filter(invoice => invoice.settled && invoice.memo === filter )
+
+        const payments = dazaarPayments.map(payment => ({
+          amount: parseInt(payment.value),
+          time: parseInt(payment.settle_date)
         }))
-      
-      self.pending = dazaarPayments
-        .filter(invoice => invoice.memo.split(':')[0] === 'dazaar')
-        .filter(invoice => !invoice.settled)
-      
-      cb()
-    })
+
+        activePayments.concat(payments)
+
+        sub.synced = true
+        sub.emit('synced')
+      })
+    }
   }
 
-  addInvoice (buyer, amount, cb) {
+  addInvoice (filter, amount, cb) {
     const self = this
     if (!cb) cb = noop
 
     this.client.addInvoice({
-      memo: `dazaar:${buyer}:${this.seller}`,
+      memo: filter,
       value: amount
     }, function (err, invoice) {
       if (err) return cb(err)
@@ -98,29 +135,9 @@ module.exports = class Payment {
     })
   }
 
-  validate (rate, user, cb) {
-    if (!cb) cb = noop
-
-    const userPayments = this.settled.filter(function (invoice) {
-      return (invoice.ref.split(':')[1] === user)
-    })
-
-    const expiryTime = userPayments.reduce(timeToExpire, userPayments[0].timestamp)
-    const timeLeft = expiryTime - Date.now() / 1000
-    
-    if (timeLeft <= 0) return cb(new Error('no time left.'))
-    return cb (null, timeLeft)
-
-    function timeToExpire (expiry, payment, index) {
-      const timeAdded = (payment.amount / rate)
-      if (payment.timestamp > expiry) return payment.timestamp + timeAdded
-
-      return expiry + timeAdded
-    }
-  }
-
   payInvoice(paymentRequest, cb) {
     const self = this
+    if (!cb) cb = noop
 
     this.client.decodePayReq({
       pay_req: paymentRequest
@@ -129,7 +146,7 @@ module.exports = class Payment {
 
       // invoice verification logic
       if (!details.description.split(':')[0] === 'dazaar') {
-        reject('unrecognized invoice.')
+        return cb(new Error('unrecognized invoice.'))
       }
 
       const call = self.client.sendPayment()
@@ -154,45 +171,40 @@ module.exports = class Payment {
     }
     return earnings
   }
-
-  shutdown () {
-    const self = this
-    this.invoiceStream.destroy()
-    this.filter.destroy()
-    grpc.closeClient(self.client)
-    // console.log(this.invoiceStream)
-  }
-}
-
-function filter (settled, pending, address, users) {
-  return tr = through({ objectMode: true }, function (invoice, _, next) {
-    const details = invoice.memo.split(':')
-
-    if (details[0] == 'dazaar') {
-      if (details[2] === address) {
-        if (invoice.settle_date === '0') {
-          if (!users.includes(details[1])) {
-            users.push(details[1])
-          }
-        } else if (users.includes(details[1])) {
-          settled.push({
-            ref: invoice.memo,
-            amount: parseInt(invoice.value),
-            timestamp: parseInt(invoice.settle_date)
-          })
-
-          // console.log(invoice, pending[0])
-          const outstandingIndex = pending.findIndex(outstanding => {
-            return outstanding.payment_request === invoice.payment_request })
-          outstanding.splice(outstandingIndex, 1)
-        }
-      }
-    }
-    next()
-  })
 }
 
 function noop () {}
+
+function convertDazaarPayment (pay) {
+  let ratio = 0
+
+  switch (pay.unit) {
+    case 'minutes':
+      ratio = 60
+      break
+    case 'seconds':
+      ratio = 1
+      break
+    case 'hours':
+      ratio = 3600
+      break
+  }
+
+  const perSecond = Number(pay.amount) / (Number(pay.interval) * ratio)
+  if (!perSecond) throw new Error('Invalid payment info')
+
+  return perSecond
+}
+
+function toSats (btcAmount) {
+  return btcAmount * 10 ** 8
+}
+
+function fromSats (btcAmount) {
+  return btcAmount / 10 ** 8
+}
+ 
+function relayToBuyer () {}
 
 function lightningRpc (opts) {
   // load macaroon from .lnd directory
