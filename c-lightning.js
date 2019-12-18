@@ -40,7 +40,7 @@ module.exports = class Payment {
 
     const sub = new EventEmitter()
 
-    const activePayments = []
+    let activePayments = []
 
     sub.synced = false
     let lastPay
@@ -52,25 +52,23 @@ module.exports = class Payment {
 
     sub.destroy = function () {}
 
-    sub.remainingTime = function (minSeconds) {
+    sub.remainingTime = function (minSeconds) {      
       const funds = sub.remainingFunds(minSeconds)
-      return Math.floor(Math.max(0, funds / perSecond))
+      return Math.floor(Math.max(0, funds / perSecond * 1000))
     }
 
     sub.remainingFunds = function (minSeconds) {
       if (!minSeconds) minSeconds = 0
 
-      const now = Math.floor(Date.now() / 1000) + minSeconds 
+      const now = Date.now() + minSeconds * 1000 
       const funds = activePayments.reduce(leftoverFunds, 0)
-      console.log(activePayments)
       
       return funds
 
       function leftoverFunds (funds, payment, i) {
-        console.log(payment)
         const nextTime = i + 1 < activePayments.length ? activePayments[i + 1].time : now
 
-        const consumed = perSecond * (nextTime - payment.time)
+        const consumed = perSecond * (nextTime - payment.time) / 1000
         funds += fromSats(payment.amount) - consumed
 
         return funds > 0 ? funds : 0
@@ -82,18 +80,17 @@ module.exports = class Payment {
     function sync (cb) {
       self.client.listinvoices()
         .then(res => {
-
           const dazaarPayments = res.result.invoices
             .filter(invoice => invoice.status === 'paid' && invoice.description === filter)
 
-          lastPay = Math.max(dazaarPayments.map(inv => inv.pay_index))
+          lastPay = Math.max(...dazaarPayments.map(inv => inv.pay_index)) - 1
 
           const payments = dazaarPayments.map(payment => ({
-            amount: parseInt(payment.masatoshi) / 1000,
-            time: parseInt(payment.paid_at)
+            amount: payment.msatoshi / 1000,
+            time: parseInt(payment.paid_at) * 1000
           }))
 
-          activePayments.concat(payments)
+          activePayments = [].concat(activePayments, payments)
 
           sub.synced = true
           sub.emit('synced')
@@ -115,16 +112,16 @@ module.exports = class Payment {
         if (invoice.memo !== filter || invoice.status !== 'paid') loop()
 
         const amountSat = parseInt(invoice.msatoshi) / 1000
-        const time = parseInt(invoice.paid_at)
+        const time = parseInt(invoice.paid_at) * 1000
+        const hash = invoice.payment_hash        
 
-        activePayments.push({ amount: amountSat, time })
+        activePayments.push({ amount: amountSat, time, hash })
 
         sub.emit('update')
 
         self.addInvoice(filter, amountSat, function (err, response) {
           // parse invoice
-          const invoice = response.result
-          loop()
+          const invoice = response.result          
         })
       })
       .catch(console.error)
@@ -143,20 +140,19 @@ module.exports = class Payment {
     
     return this.client.invoice(amountMsat, label, filter)
       .then(inv => {
-        console.log(inv)
         cb(null, inv) })
       .catch(err => cb(err))
   }
 
   payInvoice(paymentRequest, cb) {
-    console.log(paymentRequest)
+    // console.log(paymentRequest)
     const self = this
-    if (!cb) cb = noop
+    if (!cb) cb = noop    
 
     self.client.pay(paymentRequest)
       .then(payment => {
-        self.sentPayments.push(payment)
-        cb(payment)
+        self.sentPayments.push(payment)        
+        cb(null, payment)
       })
       .catch(err => cb(err))
   }

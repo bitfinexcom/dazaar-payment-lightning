@@ -44,12 +44,12 @@ module.exports = class Payment {
 
     const sub = new EventEmitter()
 
-    const activePayments = []
+    let activePayments = []
 
     sub.synced = false
     sync(filter, activePayments)
 
-    this.invoiceStream.on('data', filterInvoice)
+    self.invoiceStream.on('data', filterInvoice)
 
     sub.active = function (minSeconds) {
       return sub.remainingFunds(minSeconds) > 0
@@ -61,13 +61,13 @@ module.exports = class Payment {
 
     sub.remainingTime = function (minSeconds) {
       const funds = sub.remainingFunds(minSeconds)
-      return Math.floor(Math.max(0, funds / perSecond))
+      return Math.floor(Math.max(0, funds / perSecond * 1000))
     }
 
     sub.remainingFunds = function (minSeconds) {
       if (!minSeconds) minSeconds = 0
 
-      const now = Math.floor(Date.now() / 1000) + minSeconds 
+      const now = Date.now() + minSeconds * 1000
       const funds = activePayments.reduce(leftoverFunds, 0)
       
       return funds
@@ -75,7 +75,7 @@ module.exports = class Payment {
       function leftoverFunds (funds, payment, i) {
         const nextTime = i + 1 < activePayments.length ? activePayments[i + 1].time : now
 
-        const consumed = perSecond * (nextTime - payment.time)
+        const consumed = perSecond * (nextTime - payment.time) / 1000
         funds += fromSats(payment.amount) - consumed
 
         return funds > 0 ? funds : 0
@@ -88,7 +88,7 @@ module.exports = class Payment {
       if (invoice.memo !== filter || !invoice.settled) return
 
       const amount = parseInt(invoice.value)
-      const time = parseInt(invoice.settle_date)
+      const time = parseInt(invoice.settle_date) * 1000
 
       activePayments.push({ amount, time })
 
@@ -108,10 +108,10 @@ module.exports = class Payment {
 
         const payments = dazaarPayments.map(payment => ({
           amount: parseInt(payment.value),
-          time: parseInt(payment.settle_date)
+          time: parseInt(payment.settle_date) * 1000
         }))
 
-        activePayments.concat(payments)
+        activePayments = [].concat(activePayments, payments)
 
         sub.synced = true
         sub.emit('synced')
@@ -192,7 +192,6 @@ function convertDazaarPayment (pay) {
 
   const perSecond = Number(pay.amount) / (Number(pay.interval) * ratio)
   if (!perSecond) throw new Error('Invalid payment info')
-
   return perSecond
 }
 

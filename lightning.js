@@ -18,7 +18,7 @@ module.exports = class DazaarLightningPayment {
   }
 
   validate (buyer, cb) {
-    if (this.destroyed) return process.nextTick(cb, newError('Seller is shutting down'))
+    if (this.destroyed) return process.nextTick(cb, new Error('Seller is shutting down'))
     const tail = this._get(buyer)
 
     const timeout = setTimeout(ontimeout, 20000)
@@ -37,13 +37,13 @@ module.exports = class DazaarLightningPayment {
       if (tail.active()) onsynced()
     }
 
-    function onsynced () {
+    function onsynced () {      
       tail.removeListener('synced', onsynced)
       tail.removeListener('update', onupdate)
       clearTimeout(timeout)
 
-      const time = tail.remainingTime()
-      console.log(tail.remainingTime(), 'tailtime')
+      const time = tail.remainingTime()      
+
       if (time <= 0) return cb(new Error('No time left on subscription' + (timedout ? 'after timeout' : '')))
 
       cb(null, {
