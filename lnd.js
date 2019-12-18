@@ -30,6 +30,21 @@ module.exports = class Payment {
     })
   }
 
+  connect (nodeId, host, port, cb) {
+    const self = this
+
+    this.client.listPeers({}, function (err, res) {
+      if (res.peers.indexOf(peer => peer.pub_key = nodeId) >= 0) cb()
+
+      const request = {
+        addr: `${nodeId}@${host}:${port}`,
+        perm: true
+      }
+
+      self.client.connect(request, cb)
+    })
+  }
+
   subscription (filter, rate) {
     const self = this
     let perSecond = 0

@@ -26,6 +26,22 @@ module.exports = class Payment {
     // self.addInvoice('buyer', 2000)
   }
 
+  connect (nodeId, host, port, cb) {
+    const self = this
+
+    this.client.listpeers()
+      .then(res => {
+        peers = res.result.peers
+
+        if (peers.indexOf(peer => peer.pub_key = nodeId) >= 0) return cb()
+
+        self.client.connect(nodeId, host, port)
+          .then(res => cb(null, res))
+          .catch(err => cb(err))
+      })
+      .catch(err => cb(err))
+  }
+
   subscription (filter, rate) {
     const self = this
     let perSecond = 0
