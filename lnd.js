@@ -17,16 +17,19 @@ module.exports = class Payment {
     this.client = lndRpc
     this.users = null
     // this.filter = filter(this.settled, this.pending, sellerAddress, this.users)
+    this.nodeId = null
     this.invoiceStream = this.client.subscribeInvoices({})
     this.lastIndex = 0
   }
 
   init (cb) {
     const self = this
-    const invoiceStream = this.client.subscribeInvoices({}, cb)
 
-    invoiceStream.on('end', function () {
-      self.lastIndex = self.invoices.slice.pop().add_index
+    this.client.getInfo({}, function (err, res) {
+      if (err) return cb(err)
+
+      self.nodeId = res.identity_pubkey
+      cb()
     })
   }
 
@@ -34,14 +37,21 @@ module.exports = class Payment {
     const self = this
 
     this.client.listPeers({}, function (err, res) {
-      if (res.peers.indexOf(peer => peer.pub_key = nodeId) >= 0) cb()
+      if (res.peers.indexOf(peer => peer.pub_key = nodeId) >= 0) return cb()
+      
+      const nodeAddress = {
+        pubkey: nodeId,
+        host: `${host}:${port}`
+      }
+      
+      console.log(nodeAddress)
 
       const request = {
-        addr: `${nodeId}@${host}:${port}`,
+        addr: nodeAddress,
         perm: true
       }
 
-      self.client.connect(request, cb)
+      self.client.connectPeer(request, cb)
     })
   }
 
@@ -110,7 +120,13 @@ module.exports = class Payment {
       sub.emit('update')
 
       // repeat invoice
-      self.addInvoice(filter, amount, relayToBuyer)
+      self.addInvoice(filter, amount, function (err, info) {
+        if (err) sub.emit('error', error)
+        sub.emit('invoice', {
+          amount,
+          request: info.payment_request
+        })
+      })
     }
 
     function sync () {
@@ -171,7 +187,8 @@ module.exports = class Payment {
       })
 
       call.on('data', function (payment) {
-        return cb(null, payment)
+        if (payment.payment_error === '') return cb(null, payment)
+        return cb (new Error(payment.payment_error))
       })
     })
   }
