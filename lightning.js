@@ -76,7 +76,7 @@ module.exports = class DazaarLightningPayment extends EventEmitter {
             request: inv.payment_request,
             amount: request.amount
           }
-          return cb(err, invoice)
+          return cb(null, invoice)
         })
       })
     })
@@ -101,7 +101,7 @@ module.exports = class DazaarLightningPayment extends EventEmitter {
     this.lightning.payInvoice(invoice.request, expectedAmount, cb)
   }
 
-  connect (nodeId, host, port, cb) {
+  connect (id, cb) {
     this.lightning.connect(id, cb)
   }
 
