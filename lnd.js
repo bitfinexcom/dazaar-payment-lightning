@@ -165,13 +165,15 @@ module.exports = class Payment {
       if (err) cb(err)
 
       // invoice verification logic
-      const { label, info } = details.description.split(':')
-      const { seller, buyer } = info.trim().split(' ')
+      const [ label, info ] = details.description.split(':')
+      
+      if (label !== 'dazaar') return fail()
 
-      if (label !== 'dazaar') fail()
-      if (seller !== expected.seller) fail()
-      if (buyer !== expected.buyer) fail()
-      if (parseInt(details.num_satoshis) !== expected.amount) fail()
+      const [ seller, buyer ] = info.trim().split(' ')
+
+      if (seller !== expected.seller.toString('hex')) return fail()
+      if (buyer !== expected.buyer.toString('hex')) return fail()
+      if (parseInt(details.num_satoshis) !== expected.amount) return fail()
 
       const call = self.client.sendPayment()
 
