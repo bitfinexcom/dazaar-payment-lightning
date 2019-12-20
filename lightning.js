@@ -117,10 +117,11 @@ module.exports = class DazaarLightningPayment extends EventEmitter {
       const interval = payments.sent.length > 0 ? Date.now() - payments.sent[0].time : Date.now()
       const actualRate = totalPaid / interval
 
+      console.log(actualRate < payments.maxRate)
       if (actualRate < payments.maxRate) return sendPayment()
       
       console.log(actualRate)
-      setTimeout(checkToPay, 500, invoice, sellerId)
+      return setTimeout(checkToPay, 500, invoice, sellerId)
     }
 
     function sendPayment () {
