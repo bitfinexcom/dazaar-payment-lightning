@@ -155,7 +155,7 @@ module.exports = class Payment {
     })
   }
 
-  payInvoice(paymentRequest, expectedAmount, cb) {
+  payInvoice (paymentRequest, expected, cb) {
     const self = this
     if (!cb) cb = noop
 
@@ -165,11 +165,13 @@ module.exports = class Payment {
       if (err) cb(err)
 
       // invoice verification logic
-      if (!details.description.split(':')[0] === 'dazaar') {
-        return cb(new Error('unrecognized invoice.'))
-      }
+      const { label, info } = details.description.split(':')
+      const { seller, buyer } = info.trim().split(' ')
 
-      if (parseInt(details.num_satoshis) !== expectedAmount) return cb(new Error('unexpected invoice'))
+      if (label !== 'dazaar') fail()
+      if (seller !== expected.seller) fail()
+      if (buyer !== expected.buyer) fail()
+      if (parseInt(details.num_satoshis) !== expected.amount) fail()
 
       const call = self.client.sendPayment()
 
@@ -182,6 +184,10 @@ module.exports = class Payment {
         return cb (new Error(payment.payment_error))
       })
     })
+
+    function fail () {
+      return cb(new Error('unrecognised invoice'))
+    }
   }
 
   earnings () {

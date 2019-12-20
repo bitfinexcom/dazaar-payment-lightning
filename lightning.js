@@ -63,14 +63,14 @@ module.exports = class DazaarLightningPayment extends EventEmitter {
     }
   }
 
-  sell (request, cb) {
+  sell (request, buyerKey, cb) {
     if (!cb) cb = noop
     const self = this
     this.connect(request.id, function (err, info) {
       if (err && err.code !== 2) return cb(err)
       self.validate(request.id, function (err, res) {
-        if (err) return cb(err)
-        self.lightning.addInvoice(self._filter(request.id), request.amount, function (err, inv) {
+        // if (err) return cb(err)
+        self.lightning.addInvoice(self._filter(buyerKey), request.amount, function (err, inv) {
           if (err) return cb(err)
           const invoice = {
             request: inv.payment_request,
@@ -83,12 +83,12 @@ module.exports = class DazaarLightningPayment extends EventEmitter {
   }
 
   // does this need callback?
-  buy (sellerId, amount) {
+  buy (sellerId, buyerKey, amount) {
     // requestInovice(amount, function (err, invoice))
      const self = this
      const request = {
       amount,
-      id: this.lightning.nodeId
+      id: this.lightning.nodeId,
     }
 
     return request
