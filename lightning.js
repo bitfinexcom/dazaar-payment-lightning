@@ -64,12 +64,13 @@ module.exports = class DazaarLightningPayment extends EventEmitter {
   }
 
   sell (request, cb) {
+    if (!cb) cb = noop
     const self = this
-    this.connect(request.nodeId, function (err, info) {
+    this.connect(request.id, 'localhost', 9732, function (err, info) {
       if (err) cb(err)
-      self.validate(request.nodeId, function (err, res) {
+      self.validate(request.id, function (err, res) {
         if (err) cb(err)
-        self.lightning.addInvoice(_filter(request.nodeId), request.amount, function (err, invoice) {
+        self.lightning.addInvoice(self._filter(request.id), request.amount, function (err, invoice) {
           if (err) self.emit('error', err)
           self.emit('invoice', {
             request: invoice.payment_request,
@@ -82,6 +83,7 @@ module.exports = class DazaarLightningPayment extends EventEmitter {
 
   // does this need callback?
   buy (seller, amount, rate, cb) {
+    if (!cb) cb = console.log
     // requestInovice(amount, function (err, invoice))
      const self = this
      const request = {
@@ -94,17 +96,19 @@ module.exports = class DazaarLightningPayment extends EventEmitter {
       maxRate: rate
     }
 
-    seller.on('invoice', check)
-    seller.on('error', cb)
-
     self.emit('buy', request)
     cb()
-
+  }
     // seller.push(request)
 
-    function check (invoice) {
-      console.log('invoice')
-      const payments = self.accounts[seller.id]
+  
+
+  pay (invoice, sellerId) {
+    const self = this
+    checkToPay(invoice, sellerId)
+    
+    function checkToPay (invoice, sellerId) {
+      const payments = self.accounts[sellerId]
 
       const totalPaid = payments.sent.reduce((acc, payment) => {
         return acc + payment.amount
@@ -112,25 +116,25 @@ module.exports = class DazaarLightningPayment extends EventEmitter {
 
       const interval = payments.sent.length > 0 ? Date.now() - payments.sent[0].time : Date.now()
       const actualRate = totalPaid / interval
-      if (actualRate < payments.maxRate) return pay(invoice)
-      console.log('over rate')
-      console.log(actualRate)
 
-      setTimeout(check, 500, invoice)
+      if (actualRate < payments.maxRate) return sendPayment()
+      
+      console.log(actualRate)
+      setTimeout(checkToPay, 500, invoice, sellerId)
     }
 
-    function pay (invoice) {
+    function sendPayment () {
       self.lightning.payInvoice(invoice.request, function (err, payment, time) {
         if (err) return cb(err)
-        console.log('paid')
         if (!time) time = Date.now()
 
         const paid = {
           amount: invoice.amount,
           time
         }
+        console.log(paid)
 
-        self.accounts[seller.id].sent.push(paid)
+        self.accounts[sellerId].sent.push(paid)
       })
     }
   }
