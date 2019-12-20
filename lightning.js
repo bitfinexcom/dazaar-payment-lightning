@@ -83,7 +83,7 @@ module.exports = class DazaarLightningPayment extends EventEmitter {
   }
 
   // does this need callback?
-  buy (sellerId, buyerKey, amount) {
+  buy (sellerId, amount) {
     // requestInovice(amount, function (err, invoice))
      const self = this
      const request = {
@@ -97,8 +97,8 @@ module.exports = class DazaarLightningPayment extends EventEmitter {
 
   
 
-  pay (invoice, expectedAmount, cb) {
-    this.lightning.payInvoice(invoice.request, expectedAmount, cb)
+  pay (invoice, expected, cb) {
+    this.lightning.payInvoice(invoice.request, expected, cb)
   }
 
   connect (id, cb) {
