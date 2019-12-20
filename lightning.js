@@ -1,20 +1,30 @@
 const lnd = require('./lnd.js')
 const metadata = require('../dazaar-payment/metadata')
+const { EventEmitter } = require('events')
 const cLightning = require('./c-lightning.js')
 
 const MAX_SUBSCRIBER_CACHE = 500
 
-module.exports = class DazaarLightningPayment {
+module.exports = class DazaarLightningPayment extends EventEmitter {
   constructor (seller, payment, opts = {}) {
+    super()
+
     this.seller = seller
     this.payment = payment
+    this.payments = []
+    this.accounts = {}
     this.lightning = node(seller, opts)
     this.subscribers = new Map()
     this.destroyed = false
   }
 
-  init () {
-    this.lightning.init()
+  init (cb) {
+    const self = this
+    this.lightning.init(function (err, res) {
+      if (err) cb (err)
+      self.id = self.lightning.nodeId
+      cb(null, res)
+    })
   }
 
   validate (buyer, cb) {
@@ -53,12 +63,80 @@ module.exports = class DazaarLightningPayment {
     }
   }
 
-  buy (buyer, amount, auth, cb) {
+  sell (request, cb) {
+    const self = this
+    this.connect(request.nodeId, function (err, info) {
+      if (err) cb(err)
+      self.validate(request.nodeId, function (err, res) {
+        if (err) cb(err)
+        self.lightning.addInvoice(_filter(request.nodeId), request.amount, function (err, invoice) {
+          if (err) self.emit('error', err)
+          self.emit('invoice', {
+            request: invoice.payment_request,
+            amount: request.amount
+          })
+        })
+      })
+    })
+  }
+
+  // does this need callback?
+  buy (seller, amount, rate, cb) {
     // requestInovice(amount, function (err, invoice))
-
-    function shouldIPay () {
-
+     const self = this
+     const request = {
+      amount,
+      id: this.lightning.nodeId
     }
+
+    this.accounts[seller.id] = {
+      sent: [],
+      maxRate: rate
+    }
+
+    seller.on('invoice', check)
+    seller.on('error', cb)
+
+    self.emit('buy', request)
+    cb()
+
+    // seller.push(request)
+
+    function check (invoice) {
+      console.log('invoice')
+      const payments = self.accounts[seller.id]
+
+      const totalPaid = payments.sent.reduce((acc, payment) => {
+        return acc + payment.amount
+      }, 0)
+
+      const interval = payments.sent.length > 0 ? Date.now() - payments.sent[0].time : Date.now()
+      const actualRate = totalPaid / interval
+      if (actualRate < payments.maxRate) return pay(invoice)
+      console.log('over rate')
+      console.log(actualRate)
+
+      setTimeout(check, 500, invoice)
+    }
+
+    function pay (invoice) {
+      self.lightning.payInvoice(invoice.request, function (err, payment, time) {
+        if (err) return cb(err)
+        console.log('paid')
+        if (!time) time = Date.now()
+
+        const paid = {
+          amount: invoice.amount,
+          time
+        }
+
+        self.accounts[seller.id].sent.push(paid)
+      })
+    }
+  }
+
+  connect (nodeId, host, port, cb) {
+    this.lightning.connect(nodeId, host, port, cb)
   }
 
   destroy () {
@@ -82,6 +160,10 @@ module.exports = class DazaarLightningPayment {
     const self = this
     const tail = this.lightning.subscription(this._filter(buyer), this.payment)
     this.subscribers.set(h, tail)
+
+    tail.on('invoice', function (invoice) {
+      self.emit('invoice', invoice)
+    })
 
     return tail
   }
