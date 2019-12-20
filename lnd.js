@@ -38,6 +38,11 @@ module.exports = class Payment {
 
     this.client.listPeers({}, function (err, res) {
       if (res.peers.indexOf(peer => peer.pub_key = nodeId) >= 0) return cb()
+
+      const nodeAddress = {
+        pubkey: address.split('@')[0],
+        host: address.split('@')[1]
+      }
       
       const request = {
         addr: address,
