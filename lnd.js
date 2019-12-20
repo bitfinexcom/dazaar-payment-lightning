@@ -164,7 +164,7 @@ module.exports = class Payment {
         return cb(new Error('unrecognized invoice.'))
       }
 
-      if (parseInt(details.num_satoshis) !=== expectedAmount) return cb(new Error('unexpected invoice'))
+      if (parseInt(details.num_satoshis) !== expectedAmount) return cb(new Error('unexpected invoice'))
 
       const call = self.client.sendPayment()
 

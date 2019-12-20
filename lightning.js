@@ -84,17 +84,11 @@ module.exports = class DazaarLightningPayment extends EventEmitter {
 
   // does this need callback?
   buy (sellerId, amount) {
-    if (!cb) cb = console.log
     // requestInovice(amount, function (err, invoice))
      const self = this
      const request = {
       amount,
       id: this.lightning.nodeId
-    }
-
-    this.accounts[seller.id] = {
-      sent: [],
-      maxRate: rate
     }
 
     return request
