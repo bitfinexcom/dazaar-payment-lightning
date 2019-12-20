@@ -70,10 +70,10 @@ module.exports = class DazaarLightningPayment extends EventEmitter {
       if (err) return cb(err)
       self.validate(request.id, function (err, res) {
         if (err) return cb(err)
-        self.lightning.addInvoice(self._filter(request.id), request.amount, function (err, invoice) {
+        self.lightning.addInvoice(self._filter(request.id), request.amount, function (err, inv) {
           if (err) return cb(err)
           const invoice = {
-            request: invoice.payment_request,
+            request: inv.payment_request,
             amount: request.amount
           }
           return cb(err, invoice)
