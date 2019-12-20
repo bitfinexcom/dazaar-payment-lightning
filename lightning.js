@@ -148,8 +148,8 @@ module.exports = class DazaarLightningPayment extends EventEmitter {
 }
 
 function node (seller, opts) {
-  if (opts.implementation === 'lnd') return new lnd(seller, opts.rpc)
-  if (opts.implementation === 'c-lightning') return new cLightning(seller, opts.rpc)
+  if (opts.implementation === 'lnd') return new lnd(seller, opts.rpc, opts.nodeInfo)
+  if (opts.implementation === 'c-lightning') return new cLightning(seller, opts.rpc, opts.nodeInfo)
 
   throw new Error('unrecognised lightning node: specify lnd or c-lightning.')
 }

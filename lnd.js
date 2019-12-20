@@ -8,7 +8,7 @@ const fs = require('fs')
 process.env.GRPC_SSL_CIPHER_SUITES = 'HIGH+ECDSA'
 
 module.exports = class Payment {
-  constructor (sellerAddress, lndRpc) {
+  constructor (sellerAddress, lndRpc, nodeAddress) {
     this.seller = sellerAddress
     this.settled = []
     this.pending = []
@@ -17,7 +17,7 @@ module.exports = class Payment {
     this.client = lndRpc
     this.users = null
     // this.filter = filter(this.settled, this.pending, sellerAddress, this.users)
-    this.nodeId = null
+    this.nodeId = nodeInfo
     this.invoiceStream = this.client.subscribeInvoices({})
     this.lastIndex = 0
   }
@@ -28,7 +28,7 @@ module.exports = class Payment {
     this.client.getInfo({}, function (err, res) {
       if (err) return cb(err)
 
-      self.nodeId = res.identity_pubkey
+      self.nodeId = `${res.identity_pubkey}@`{self.lndHost}
       cb()
     })
   }
@@ -43,9 +43,9 @@ module.exports = class Payment {
         pubkey: address.split('@')[0],
         host: address.split('@')[1]
       }
-      
+
       const request = {
-        addr: address,
+        addr: nodeAddress,
         perm: true
       }
 
