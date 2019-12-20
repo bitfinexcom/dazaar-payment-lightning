@@ -66,23 +66,24 @@ module.exports = class DazaarLightningPayment extends EventEmitter {
   sell (request, cb) {
     if (!cb) cb = noop
     const self = this
-    this.connect(request.id, 'localhost', 9732, function (err, info) {
-      if (err) cb(err)
+    this.connect(request.id, function (err, info) {
+      if (err) return cb(err)
       self.validate(request.id, function (err, res) {
-        if (err) cb(err)
+        if (err) return cb(err)
         self.lightning.addInvoice(self._filter(request.id), request.amount, function (err, invoice) {
-          if (err) self.emit('error', err)
-          self.emit('invoice', {
+          if (err) return cb(err)
+          const invoice = {
             request: invoice.payment_request,
             amount: request.amount
-          })
+          }
+          return cb(err, invoice)
         })
       })
     })
   }
 
   // does this need callback?
-  buy (seller, amount, rate, cb) {
+  buy (sellerId, amount) {
     if (!cb) cb = console.log
     // requestInovice(amount, function (err, invoice))
      const self = this
@@ -96,52 +97,18 @@ module.exports = class DazaarLightningPayment extends EventEmitter {
       maxRate: rate
     }
 
-    self.emit('buy', request)
-    cb()
+    return request
   }
     // seller.push(request)
 
   
 
-  pay (invoice, sellerId) {
-    const self = this
-    checkToPay(invoice, sellerId)
-    
-    function checkToPay (invoice, sellerId) {
-      const payments = self.accounts[sellerId]
-
-      const totalPaid = payments.sent.reduce((acc, payment) => {
-        return acc + payment.amount
-      }, 0)
-
-      const interval = payments.sent.length > 0 ? Date.now() - payments.sent[0].time : Date.now()
-      const actualRate = totalPaid / interval
-
-      console.log(actualRate < payments.maxRate)
-      if (actualRate < payments.maxRate) return sendPayment()
-      
-      console.log(actualRate)
-      return setTimeout(checkToPay, 500, invoice, sellerId)
-    }
-
-    function sendPayment () {
-      self.lightning.payInvoice(invoice.request, function (err, payment, time) {
-        if (err) return cb(err)
-        if (!time) time = Date.now()
-
-        const paid = {
-          amount: invoice.amount,
-          time
-        }
-        console.log(paid)
-
-        self.accounts[sellerId].sent.push(paid)
-      })
-    }
+  pay (invoice, expectedAmount, cb) {
+    this.lightning.payInvoice(invoice.request, expectedAmount, cb)
   }
 
   connect (nodeId, host, port, cb) {
-    this.lightning.connect(nodeId, host, port, cb)
+    this.lightning.connect(id, cb)
   }
 
   destroy () {

@@ -33,21 +33,14 @@ module.exports = class Payment {
     })
   }
 
-  connect (nodeId, host, port, cb) {
+  connect (address, cb) {
     const self = this
 
     this.client.listPeers({}, function (err, res) {
       if (res.peers.indexOf(peer => peer.pub_key = nodeId) >= 0) return cb()
       
-      const nodeAddress = {
-        pubkey: nodeId,
-        host: `${host}:${port}`
-      }
-      
-      console.log(nodeAddress)
-
       const request = {
-        addr: nodeAddress,
+        addr: address,
         perm: true
       }
 
@@ -118,15 +111,6 @@ module.exports = class Payment {
       activePayments.push({ amount, time })
 
       sub.emit('update')
-
-      // repeat invoice
-      self.addInvoice(filter, amount, function (err, info) {
-        if (err) sub.emit('error', error)
-        sub.emit('invoice', {
-          amount,
-          request: info.payment_request
-        })
-      })
     }
 
     function sync () {
@@ -166,7 +150,7 @@ module.exports = class Payment {
     })
   }
 
-  payInvoice(paymentRequest, cb) {
+  payInvoice(paymentRequest, expectedAmount, cb) {
     const self = this
     if (!cb) cb = noop
 
@@ -179,6 +163,8 @@ module.exports = class Payment {
       if (!details.description.split(':')[0] === 'dazaar') {
         return cb(new Error('unrecognized invoice.'))
       }
+
+      if (parseInt(details.num_satoshis) !=== expectedAmount) return cb(new Error('unexpected invoice'))
 
       const call = self.client.sendPayment()
 
