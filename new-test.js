@@ -324,23 +324,36 @@ test.only('lnd buy method', t => {
   //    t.end()
   // })
 
-  pay1.init(function (err, info) {
-    pay1.validate('buyer', function (err, info) {
-      if (err) console.error(err)
-      console.log('______________________________________________')
-      pay2.buy(pay1, 800, 0.1, function (err, res) {
-        console.log(res)
-      console.log('______________________________________________')
+  // pay1.init(function (err, info) {
+  //   pay1.validate('buyer', function (err, info) {
+  //     if (err) console.error(err)
+  //     console.log('______________________________________________')
+  //     pay2.buy(pay1, 800, 0.1, function (err, res) {
+  //       console.log(res)
+  //     console.log('______________________________________________')
 
-        pay1.lightning.addInvoice('dazaar: seller buyer', 1000, function (err, invoice) {
-          console.log(err, invoice)
-          if (err) pay1.emit('error', err)
-          console.log('______________________________________________')
-          pay1.emit('invoice', {
-            request: invoice.payment_request,
-            amount: 200
-          })
-        })
+  //       pay1.lightning.addInvoice('dazaar: seller buyer', 1000, function (err, invoice) {
+  //         console.log(err, invoice)
+  //         if (err) pay1.emit('error', err)
+  //         console.log('______________________________________________')
+  //         pay1.emit('invoice', {
+  //           request: invoice.payment_request,
+  //           amount: 200
+  //         })
+  //       })
+  //     })
+  //   })
+  // })
+
+  pay1.init(function (err, info) {
+    if (err) console.error(err)
+    pay2.init(function (err, info) {
+      pay2.on('buy', request => pay1.sell(request, console.log))
+
+      if (err) console.error(err)
+      pay2.buy(pay1, 800, 0.1, function (err, res) {
+        pay1.on('invoice', invoice => pay2.pay(invoice, pay1.id))
+        if (err) console.error (err)        
       })
     })
   })
