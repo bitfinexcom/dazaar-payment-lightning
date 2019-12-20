@@ -17,7 +17,7 @@ module.exports = class Payment {
     this.client = lndRpc
     this.users = null
     // this.filter = filter(this.settled, this.pending, sellerAddress, this.users)
-    this.nodeId = nodeInfo
+    this.nodeId = nodeAddress
     this.invoiceStream = this.client.subscribeInvoices({})
     this.lastIndex = 0
   }
