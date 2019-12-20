@@ -28,7 +28,7 @@ module.exports = class Payment {
     this.client.getInfo({}, function (err, res) {
       if (err) return cb(err)
 
-      self.nodeId = `${res.identity_pubkey}@`{self.lndHost}
+      self.nodeId = `${res.identity_pubkey}@${self.lndHost}`
       cb()
     })
   }
