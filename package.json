@@ -10,6 +10,7 @@
   "license": "ISC",
   "dependencies": {
     "clightning-rpc": "^0.3.2",
+    "dazaar": "github:bitfinexcom/dazaar",
     "eclair-rpc": "0.0.1",
     "got": "^9.6.0",
     "grpc": "^1.24.1",
