@@ -5,15 +5,15 @@ const cLightning = require('./c-lightning.js')
 
 const MAX_SUBSCRIBER_CACHE = 500
 
-module.exports = class DazaarLightningPayment extends EventEmitter {
-  constructor (seller, payment, opts = {}) {
+module.exports = class DazaarLightningPayment {
+  constructor (sellerKey, payment, opts = {}) {
     super()
 
-    this.seller = seller
+    this.sellerKey = sellerKey
     this.payment = payment
     this.payments = []
     this.accounts = {}
-    this.lightning = node(seller, opts)
+    this.lightning = node(sellerKey, opts)
     this.subscribers = new Map()
     this.destroyed = false
   }
@@ -82,20 +82,15 @@ module.exports = class DazaarLightningPayment extends EventEmitter {
     })
   }
 
-  // does this need callback?
   buy (sellerId, amount) {
-    // requestInovice(amount, function (err, invoice))
-     const self = this
-     const request = {
+    const self = this
+    const request = {
       amount,
       id: this.lightning.nodeId,
     }
 
     return request
   }
-    // seller.push(request)
-
-  
 
   pay (invoice, expected, cb) {
     this.lightning.payInvoice(invoice.request, expected, cb)
@@ -115,7 +110,7 @@ module.exports = class DazaarLightningPayment extends EventEmitter {
   }
 
   _filter (buyer) {
-    return metadata(this.seller, buyer)
+    return metadata(this.sellerKey, buyer)
   }
 
   _get (buyer) {
@@ -126,10 +121,6 @@ module.exports = class DazaarLightningPayment extends EventEmitter {
     const self = this
     const tail = this.lightning.subscription(this._filter(buyer), this.payment)
     this.subscribers.set(h, tail)
-
-    tail.on('invoice', function (invoice) {
-      self.emit('invoice', invoice)
-    })
 
     return tail
   }
@@ -147,9 +138,11 @@ module.exports = class DazaarLightningPayment extends EventEmitter {
   }
 }
 
-function node (seller, opts) {
-  if (opts.implementation === 'lnd') return new lnd(seller, opts.rpc, opts.nodeInfo)
-  if (opts.implementation === 'c-lightning') return new cLightning(seller, opts.rpc, opts.nodeInfo)
+function node (sellerKey, opts) {
+  if (sellerKey instanceof Buffer) sellerKey = sellerKey.toString('hex')
+
+  if (opts.implementation === 'lnd') return new lnd(sellerKey, opts)
+  if (opts.implementation === 'c-lightning') return new cLightning(sellerKey, opts)
 
   throw new Error('unrecognised lightning node: specify lnd or c-lightning.')
 }
