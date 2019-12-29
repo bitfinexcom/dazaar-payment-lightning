@@ -8,22 +8,20 @@ module.exports = class Payment {
     this.outstanding = []
     this.sentPayments = []
 
+    this.nodeId = null
     this.client = rpc
     this.users = null
   }
 
-  async init () {
+  async init (cb) {
     const self = this
 
-    this.client.listinvoices().then(res => {
-      invoices = res.result
-
-      invoices.filter()
-    })
-
-    // const invoices = await self.client.listinvoices()
-    // const dazaarInvoices = invoices.result.invoices()
-    // self.addInvoice('buyer', 2000)
+    this.client.getinfo()
+      .then(function (res) {
+      self.nodeId = res.result.id
+        cb()
+      })
+      .catch(err => cb(err))
   }
 
   connect (nodeId, host, port, cb) {
@@ -31,7 +29,7 @@ module.exports = class Payment {
 
     this.client.listpeers()
       .then(res => {
-        peers = res.result.peers
+        const peers = res.result.peers
 
         if (peers.indexOf(peer => peer.pub_key = nodeId) >= 0) return cb()
 
@@ -144,7 +142,7 @@ module.exports = class Payment {
     }
   }
 
-  async addInvoice (filter, amount, cb) {
+  addInvoice (filter, amount, cb) {
     const self = this
     // generate unique label per invoice
     const tag = `${filter}:${Date.now()}`
@@ -167,8 +165,9 @@ module.exports = class Payment {
 
     self.client.pay(paymentRequest)
       .then(payment => {
-        self.sentPayments.push(payment)        
-        cb(null, payment)
+        if (payment.error) return cb(new Error(payment.error.message))
+
+        cb(null, payment, Date.now())
       })
       .catch(err => cb(err))
   }
