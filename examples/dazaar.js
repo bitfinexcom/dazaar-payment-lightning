@@ -1,35 +1,41 @@
-const Lightning = require('./lightning.js')
-const lndRpc = require('./lnd-grpc.js')
+const Lightning = require('../lightning.js')
 const hypercore = require('hypercore')
 const pump = require('pump')
-const market = require('dazaar/market')
+const market = require('../../dazaar/market')
 
 const lndOpts2 = {
   lnddir: './.lnd1',
-  rpcProtoPath: 'rpc.proto',
-  port: 'localhost:13009',
+  rpcPort: 'localhost:13009',
   nodeId: '02451eab8783f22f702ee4e620db480caae44954a2cb436d3b55c81f6678f99d22@localhost:9731',
   network: 'regtest'
 }
 
 const lndOpts1 = {
   lnddir: './.lnd',
-  rpcProtoPath: __dirname + '/rpc.proto',
-  port: 'localhost:12009',
+  rpcPort: 'localhost:12009',
   nodeId: '021cc07997f9684f4963b172e5ab6dfd3b358ecc50fce09fa4703d39b1106f7e37@localhost:9734',
+  network: 'regtest'
+}
+
+const cOpts2 = {
+  lightningdDir: '.c2',
+  nodeId: '03d2a092445974f02ee04111592a5c16979504ba97fb0394d7eed3b3abbf3a231c@localhost:9732',
+  network: 'regtest'
+}
+
+const cOpts1 = {
+  lightningdDir: './.c1',
+  nodeId: '02ac88ac17a612971165e4b50fa8d338378abee233b5fd5cef9cf122ede54870b6@localhost:9733',
   network: 'regtest'
 }
 
 const dazaarParameters = {
   payto: 'dazaartest22',
   currency: 'LightningBTC',
-  amount: '0.000002',
+  amount: '0.02',
   unit: 'hours',
   interval: 1
 }
-
-const lightningRpc1 = lndRpc(lndOpts1)
-const lightningRpc2 = lndRpc(lndOpts2)
 
 const m = market('./tmp')
 
@@ -57,8 +63,8 @@ seller.receive('lnd-pay-request', function (request, stream) {
 seller.ready(function (err) {
   if (err) throw err // Do proper error handling
 
-  sellerLnd = new Lightning(seller.key.toString('hex'), dazaarParameters, { implementation: 'lnd', rpc: lightningRpc1, nodeInfo: lndOpts1.nodeId })
-  buyerLnd = new Lightning(seller.key.toString('hex'), dazaarParameters, { implementation: 'lnd', rpc: lightningRpc2, nodeInfo: lndOpts2.nodeId })
+  sellerLnd = new Lightning(seller.key, dazaarParameters, { implementation: 'c-lightning', nodeOpts: cOpts2 })
+  buyerLnd = new Lightning(seller.key, dazaarParameters, { implementation: 'c-lightning', nodeOpts: cOpts1 })
 
   const buyer = m.buy(seller.key)
 
@@ -86,6 +92,7 @@ seller.ready(function (err) {
       buyerLnd.pay(invoice, { buyer: buyer.key, seller: seller.key, amount: 800 }, function (err) {
         sellerLnd.validate(buyer.key, function (err, info) {
           console.log(err, info)
+          setTimeout(() => { buyer.send('lnd-pay-request', request) }, 5000)
         })
       })
     })
