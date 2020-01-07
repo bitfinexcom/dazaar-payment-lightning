@@ -7,8 +7,6 @@ const MAX_SUBSCRIBER_CACHE = 500
 
 module.exports = class DazaarLightningPayment {
   constructor (sellerKey, payment, opts = {}) {
-    super()
-
     this.sellerKey = sellerKey
     this.payment = payment
     this.payments = []
@@ -70,14 +68,7 @@ module.exports = class DazaarLightningPayment {
       if (err && err.code !== 2) return cb(err)
       self.validate(buyerKey, function (err, res) {
         // if (err) return cb(err)
-        self.lightning.addInvoice(self._filter(buyerKey), request.amount, function (err, inv) {
-          if (err) return cb(err)
-          const invoice = {
-            request: inv.payment_request,
-            amount: request.amount
-          }
-          return cb(null, invoice)
-        })
+        self.lightning.addInvoice(self._filter(buyerKey), request.amount, cb)
       })
     })
   }
@@ -141,8 +132,8 @@ module.exports = class DazaarLightningPayment {
 function node (sellerKey, opts) {
   if (sellerKey instanceof Buffer) sellerKey = sellerKey.toString('hex')
 
-  if (opts.implementation === 'lnd') return new lnd(sellerKey, opts)
-  if (opts.implementation === 'c-lightning') return new cLightning(sellerKey, opts)
+  if (opts.implementation === 'lnd') return new lnd(sellerKey, opts.nodeOpts)
+  if (opts.implementation === 'c-lightning') return new cLightning(sellerKey, opts.nodeOpts)
 
   throw new Error('unrecognised lightning node: specify lnd or c-lightning.')
 }
