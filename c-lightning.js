@@ -1,39 +1,29 @@
 const sodium = require('sodium-native')
+const unixson = require('unixson')
 const { EventEmitter } = require('events')
 
 module.exports = class Payment {
-  constructor (sellerAddress, rpc) {
+  constructor (sellerAddress, opts) {
     this.seller = sellerAddress
-    this.received = []
-    this.outstanding = []
-    this.sentPayments = []
-
-    this.nodeId = null
-    this.client = rpc
-    this.users = null
+    this.nodeId = opts.nodeId
+    
+    this.client = unixson(opts.lightningdDir + '/regtest/lightning-rpc')
   }
 
-  async init (cb) {
+  connect (nodeId, cb) {
+    if (!cb) cb = noop
     const self = this
 
-    this.client.getinfo()
-      .then(function (res) {
-      self.nodeId = res.result.id
-        cb()
-      })
-      .catch(err => cb(err))
-  }
-
-  connect (nodeId, host, port, cb) {
-    const self = this
+    const [pubkey, address] = nodeId.split('@')
+    const [host, port] = address.split(':')
 
     this.client.listpeers()
       .then(res => {
         const peers = res.result.peers
 
-        if (peers.indexOf(peer => peer.pub_key = nodeId) >= 0) return cb()
+        if (peers.indexOf(peer => peer.pub_key = pubkey) >= 0) return cb()
 
-        self.client.connect(nodeId, host, port)
+        self.client.connect(pubkey, host, port)
           .then(res => cb(null, res))
           .catch(err => cb(err))
       })
@@ -57,8 +47,7 @@ module.exports = class Payment {
     let activePayments = []
 
     sub.synced = false
-    let lastPay
-    sync(loop)
+    sync(tail)
 
     sub.active = function (minSeconds) {
       return sub.remainingFunds(minSeconds) > 0
@@ -66,7 +55,7 @@ module.exports = class Payment {
 
     sub.destroy = function () {}
 
-    sub.remainingTime = function (minSeconds) {      
+    sub.remainingTime = function (minSeconds) {
       const funds = sub.remainingFunds(minSeconds)
       return Math.floor(Math.max(0, funds / perSecond * 1000))
     }
@@ -97,7 +86,7 @@ module.exports = class Payment {
           const dazaarPayments = res.result.invoices
             .filter(invoice => invoice.status === 'paid' && invoice.description === filter)
 
-          lastPay = Math.max(...dazaarPayments.map(inv => inv.pay_index)) - 1
+          sub._lastpayIndex = Math.max(...dazaarPayments.map(inv => inv.pay_index))
 
           const payments = dazaarPayments.map(payment => ({
             amount: payment.msatoshi / 1000,
@@ -110,35 +99,32 @@ module.exports = class Payment {
           sub.emit('synced')
           cb()
         })
+        // CHECK: error handling
         .catch(console.error)
     }
 
-    function loop (err) {
-      if (err) {
-        console.error(err)
-        return
-      }
+    function tail (index) {
+      index = index || sub._lastpayIndex
+      self.client.waitanyinvoice(index)
+        .then(function (res) {
+          const invoice = res.result
 
-      self.client.waitanyinvoice(lastPay).then(function (res) {
-        const invoice = res.result
-        lastPay = invoice.pay_index
-
-        if (invoice.memo !== filter || invoice.status !== 'paid') loop()
-
-        const amountSat = parseInt(invoice.msatoshi) / 1000
-        const time = parseInt(invoice.paid_at) * 1000
-        const hash = invoice.payment_hash        
-
-        activePayments.push({ amount: amountSat, time, hash })
-
-        sub.emit('update')
-
-        self.addInvoice(filter, amountSat, function (err, response) {
-          // parse invoice
-          const invoice = response.result          
+          filterInvoice(invoice)
+          return tail(++index)
         })
-      })
-      .catch(console.error)
+        // CHECK: error handling
+        .catch(console.error)
+    }
+
+    function filterInvoice (invoice) {
+      if (invoice.description !== filter) return 
+
+      const amount = parseInt(invoice.msatoshi) / 1000
+      const time = parseInt(invoice.paid_at) * 1000
+
+      activePayments.push({ amount, time })
+
+      sub.emit('update')
     }
   }
 
@@ -153,42 +139,52 @@ module.exports = class Payment {
     const amountMsat = amount * 1000
     
     return this.client.invoice(amountMsat, label, filter)
-      .then(inv => {
-        cb(null, inv) })
-      .catch(err => cb(err))
-  }
-
-  payInvoice(paymentRequest, cb) {
-    // console.log(paymentRequest)
-    const self = this
-    if (!cb) cb = noop    
-
-    self.client.pay(paymentRequest)
-      .then(payment => {
-        if (payment.error) return cb(new Error(payment.error.message))
-
-        cb(null, payment, Date.now())
+      .then(res => {
+        const invoice = {
+          request: res.result.bolt11,
+          amount: amount
+        }
+        cb(null, invoice)
       })
       .catch(err => cb(err))
   }
 
-  earnings () {
-    const earnings = {}
-    for (let user of this.users) {
-      earnings[user] = this.received.reduce(function (acc, payment) {
-        if (payment.ref.split(':')[1] !== user) return acc
-        return acc + payment.amount
-      }, 0)
+  payInvoice(paymentRequest, expected, cb) {
+    // console.log(paymentRequest)
+    const self = this
+    if (!cb) cb = noop
+
+    self.client.decodepay(paymentRequest)
+      .then(res => {
+        const details = res.result
+
+        const [label, info] = details.description.split(':')
+
+        if (label !== 'dazaar') return fail()
+
+        const [seller, buyer] = info.trim().split(' ')
+
+        if (seller !== expected.seller.toString('hex')) return fail(1)
+        if (buyer !== expected.buyer.toString('hex')) return fail(2)
+        if (parseInt(details.msatoshi) !== expected.amount * 1000) return fail(3)
+
+        self.client.pay(paymentRequest)
+          .then(payment => {
+            if (payment.error) return cb(new Error(payment.error.message))
+
+            cb(null, payment)
+          })
+          .catch(err => cb(err))          
+      })
+      .catch(err => cb(err))
+
+    function fail (code) {
+      return cb(new Error(`unrecognised invoice: ${code}`))
     }
-    return earnings
   }
 }
 
 function noop () {}
-
-function toSats (btcAmount) {
-  return btcAmount * 10 ** 8
-}
 
 function fromSats (btcAmount) {
   return btcAmount / 10 ** 8
