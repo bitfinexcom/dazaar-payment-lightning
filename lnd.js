@@ -10,9 +10,9 @@ process.env.GRPC_SSL_CIPHER_SUITES = 'HIGH+ECDSA'
 module.exports = class Payment {
   constructor (sellerAddress, opts) {
     this.seller = sellerAddress
-    this.client = LndGrpc(opts)
+    this.nodeId = opts.nodeId
 
-    this.nodeId = opts.nodeAddress
+    this.client = LndGrpc(opts)
     this.invoiceStream = this.client.subscribeInvoices({})
     this.lastIndex = 0
   }
@@ -54,7 +54,7 @@ module.exports = class Payment {
     let activePayments = []
 
     sub.synced = false
-    sync(filter, activePayments)
+    sync()
 
     self.invoiceStream.on('data', filterInvoice)
 
@@ -108,7 +108,7 @@ module.exports = class Payment {
         if (err) throw err
 
         const dazaarPayments = res.invoices
-          .filter(invoice => invoice.settled && invoice.memo === filter )
+          .filter(invoice => invoice.settled && invoice.memo === filter)
 
         const payments = dazaarPayments.map(payment => ({
           amount: parseInt(payment.value),
@@ -130,11 +130,14 @@ module.exports = class Payment {
     this.client.addInvoice({
       memo: filter,
       value: amount
-    }, function (err, invoice) {
+    }, function (err, res) {
       if (err) return cb(err)
 
-      // label invoice and add to outstanding payments
-      self.pending.push(invoice)
+      const invoice = {
+        request: res.payment_request,
+        amount: amount
+      }
+
       cb(null, invoice)
     })
   }
