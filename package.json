@@ -9,20 +9,13 @@
   "author": "Christophe Diederichs",
   "license": "ISC",
   "dependencies": {
-    "@grpc/proto-loader": "^0.5.3",
-    "clightning-rpc": "^0.3.2",
     "dazaar": "github:bitfinexcom/dazaar",
-    "eclair-rpc": "0.0.1",
-    "got": "^9.6.0",
-    "grpc": "^1.24.1",
+    "grpc-lnd": "^1.0.1",
+    "hypercore": "^8.4.0",
     "nanoassert": "^2.0.0",
-    "querystring": "^0.2.0",
-    "tape": "^4.11.0",
-    "tape-promise": "^4.0.0",
+    "pump": "^3.0.0",
     "through2": "^3.0.1",
-    "unixson": "^1.0.0",
-    "websocket": "^1.0.30",
-    "ws": "^7.2.0"
+    "unixson": "^1.0.0"
   },
   "devDependencies": {},
   "repository": {
