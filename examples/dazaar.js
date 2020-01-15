@@ -4,14 +4,14 @@ const pump = require('pump')
 const market = require('../../dazaar/market')
 
 const lndOpts2 = {
-  lnddir: './.lnd1',
+  lnddir: './.lnd2',
   rpcPort: 'localhost:13009',
   nodeId: '02451eab8783f22f702ee4e620db480caae44954a2cb436d3b55c81f6678f99d22@localhost:9731',
   network: 'regtest'
 }
 
 const lndOpts1 = {
-  lnddir: './.lnd',
+  lnddir: './.lnd1',
   rpcPort: 'localhost:12009',
   nodeId: '021cc07997f9684f4963b172e5ab6dfd3b358ecc50fce09fa4703d39b1106f7e37@localhost:9734',
   network: 'regtest'
