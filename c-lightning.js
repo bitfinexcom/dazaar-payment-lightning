@@ -1,21 +1,24 @@
-const sodium = require('sodium-native')
+const crypto = require('crypto')
 const unixson = require('unixson')
 const { EventEmitter } = require('events')
 
 module.exports = class Payment {
-  constructor (sellerAddress, opts) {
-    this.seller = sellerAddress
-    this.nodeId = opts.nodeId
-    
+  constructor (opts) {
     this.client = unixson(opts.lightningdDir + '/regtest/lightning-rpc')
+    this.requests = []
   }
 
-  connect (nodeId, cb) {
+  getNodeId (cb) {
+    this.client.getinfo()
+      .then(res => {
+        cb(null, res.result.id)
+      })
+      .catch(err => cb(err))
+  }
+
+  connect (opts, cb) {
     if (!cb) cb = noop
     const self = this
-
-    const [pubkey, address] = nodeId.split('@')
-    const [host, port] = address.split(':')
 
     this.client.listpeers()
       .then(res => {
@@ -23,7 +26,9 @@ module.exports = class Payment {
 
         if (peers.indexOf(peer => peer.pub_key = pubkey) >= 0) return cb()
 
-        self.client.connect(pubkey, host, port)
+        const [host, port] = opts.host.split(':')
+
+        self.client.connect(opts.pubkey, host, port)
           .then(res => cb(null, res))
           .catch(err => cb(err))
       })
@@ -99,8 +104,10 @@ module.exports = class Payment {
           sub.emit('synced')
           cb()
         })
-        // CHECK: error handling
-        .catch(console.error)
+        .catch(err => {
+          sub.emit('warning', err)
+          return
+        })
     }
 
     function tail (index) {
@@ -132,9 +139,9 @@ module.exports = class Payment {
     const self = this
     // generate unique label per invoice
     const tag = `${filter}:${Date.now()}`
-    const labelBuf = Buffer.alloc(sodium.crypto_generichash_BYTES)
-    sodium.crypto_generichash(labelBuf, Buffer.from(tag))
-    const label = labelBuf.toString('base64')
+    const label = crypto.createHash('sha256')
+      .update(Buffer.from(tag))
+      .digest('base64')
 
     const amountMsat = amount * 1000
     
@@ -149,7 +156,7 @@ module.exports = class Payment {
       .catch(err => cb(err))
   }
 
-  payInvoice(paymentRequest, expected, cb) {
+  payInvoice(paymentRequest) {
     // console.log(paymentRequest)
     const self = this
     if (!cb) cb = noop
@@ -164,10 +171,17 @@ module.exports = class Payment {
 
         const [seller, buyer] = info.trim().split(' ')
 
-        if (seller !== expected.seller.toString('hex')) return fail(1)
-        if (buyer !== expected.buyer.toString('hex')) return fail(2)
-        if (parseInt(details.msatoshi) !== expected.amount * 1000) return fail(3)
+        const invoice = {
+          buyer,
+          seller,
+          amount: parseInt(details.msatoshi) / 1000
+        }
 
+        const index = self.requests.findIndex(matchRequest(invoice))
+        if (index === -1) return fail()
+        
+        self.requests.splice(index, 1)
+        
         self.client.pay(paymentRequest)
           .then(payment => {
             if (payment.error) return cb(new Error(payment.error.message))
@@ -178,8 +192,16 @@ module.exports = class Payment {
       })
       .catch(err => cb(err))
 
-    function fail (code) {
-      return cb(new Error(`unrecognised invoice: ${code}`))
+    function fail () {
+      return cb(new Error('unrecognised invoice'))
+    }
+
+    function matchRequest (inv) {
+      return req => {
+        return req.buyer === inv.buyer 
+          && req.seller === inv.seller 
+          && req.amount === inv.amount
+      }
     }
   }
 }

@@ -8,24 +8,32 @@ const fs = require('fs')
 process.env.GRPC_SSL_CIPHER_SUITES = 'HIGH+ECDSA'
 
 module.exports = class Payment {
-  constructor (sellerAddress, opts) {
-    this.seller = sellerAddress
-    this.nodeId = opts.nodeId
-
+  constructor (opts) {
     this.client = LndGrpc(opts)
     this.invoiceStream = this.client.subscribeInvoices({})
     this.lastIndex = 0
+
+    this.requests = []
   }
 
-  connect (address, cb) {
+  getNodeId (cb) {
+    this.client.getInfo({}, function (err, res) {
+      if (err) return cb(err)
+      cb(null, res.identity_pubkey)
+    })
+  }
+
+  connect (opts, cb) {
     const self = this
 
     this.client.listPeers({}, function (err, res) {
+      if (err) return cb(err)
+
       if (res.peers.indexOf(peer => peer.pub_key = nodeId) >= 0) return cb()
 
       const nodeAddress = {
-        pubkey: address.split('@')[0],
-        host: address.split('@')[1]
+        pubkey: opts.id,
+        host: opts.host
       }
 
       const request = {
@@ -105,7 +113,11 @@ module.exports = class Payment {
     function sync () {
       self.client.listInvoices({}, function (err, res) {
         // CHECK: error handling
-        if (err) throw err
+        if (err) {
+          sub.destroy()
+          sub.emit('warning', err)
+          return 
+        }
 
         const dazaarPayments = res.invoices
           .filter(invoice => invoice.settled && invoice.memo === filter)
@@ -142,14 +154,14 @@ module.exports = class Payment {
     })
   }
 
-  payInvoice (paymentRequest, expected, cb) {
+  payInvoice (paymentRequest, cb) {
     const self = this
     if (!cb) cb = noop
 
     this.client.decodePayReq({
       pay_req: paymentRequest
     }, function (err, details) {
-      if (err) cb(err)
+      if (err) return cb(err)
 
       // invoice verification logic
       const [ label, info ] = details.description.split(':')
@@ -158,12 +170,18 @@ module.exports = class Payment {
 
       const [ seller, buyer ] = info.trim().split(' ')
 
-      if (seller !== expected.seller.toString('hex')) return fail()
-      if (buyer !== expected.buyer.toString('hex')) return fail()
-      if (parseInt(details.num_satoshis) !== expected.amount) return fail()
+      const invoice = {
+        buyer,
+        seller,
+        amount: parseInt(details.num_satoshis)
+      }
 
+      const index = self.requests.findIndex(matchRequest(invoice))
+      if (index === -1) return fail()
+      
+      self.requests.splice(index, 1)
+        
       const call = self.client.sendPayment()
-
       call.write({
         payment_request: paymentRequest
       })
@@ -176,6 +194,14 @@ module.exports = class Payment {
 
     function fail () {
       return cb(new Error('unrecognised invoice'))
+    }
+
+    function matchRequest (inv) {
+      return req => {
+        return req.buyer === inv.buyer 
+          && req.seller === inv.seller 
+          && req.amount === inv.amount
+      }
     }
   }
 

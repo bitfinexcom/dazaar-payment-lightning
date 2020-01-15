@@ -59,8 +59,8 @@ seller.ready(function (err) {
 
   const buyer = m.buy(seller.key)
 
-  sellerLnd = new Lightning(seller, dazaarParameters, { implementation: 'lnd', info: lndOpts1 })
-  buyerLnd = new Lightning(buyer, dazaarParameters, { implementation: 'lnd', info: lndOpts2 })
+  sellerLnd = new Lightning(seller, dazaarParameters, { implementation: 'lnd', info: lndOpts2 })
+  buyerLnd = new Lightning(buyer, dazaarParameters, { implementation: 'lnd', info: lndOpts1 })
 
   buyer.on('validate', function () {
     console.log('remote validated us')
@@ -80,21 +80,14 @@ seller.ready(function (err) {
   })
 
   setImmediate(function () {
-    buyerLnd.buy(800, seller.key, function (err) {
+    buyerLnd.buy(800, seller.key, repeatValidate)
+
+    function repeatValidate () {
+      if (err) console.error(err)
       sellerLnd.validate(buyer.key, function (err, info) {
-        console.log(err, info)
+        if (err) setTimeout(repeatValidate, 100)
+        console.log(info)
       })
-    })
+    }
   })
-
-  setTimeout(repeatBuy, 5000, 800, 5000)  
-
-  function repeatBuy (amount, interval) {
-    buyerLnd.buy(amount, seller.key, function (err) {
-      sellerLnd.validate(buyer.key, function (err, info) {
-        console.log(err, info)
-        setTimeout(() => repeatBuy(amount, interval), interval)
-      })
-    })
-  }
 })
