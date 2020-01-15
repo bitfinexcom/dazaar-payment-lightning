@@ -63,8 +63,8 @@ seller.receive('lnd-pay-request', function (request, stream) {
 seller.ready(function (err) {
   if (err) throw err // Do proper error handling
 
-  sellerLnd = new Lightning(seller.key, dazaarParameters, { implementation: 'c-lightning', nodeOpts: cOpts2 })
-  buyerLnd = new Lightning(seller.key, dazaarParameters, { implementation: 'c-lightning', nodeOpts: cOpts1 })
+  sellerLnd = new Lightning(seller.key, dazaarParameters, { implementation: 'lnd', nodeOpts: lndOpts2 })
+  buyerLnd = new Lightning(seller.key, dazaarParameters, { implementation: 'lnd', nodeOpts: lndOpts1 })
 
   const buyer = m.buy(seller.key)
 
