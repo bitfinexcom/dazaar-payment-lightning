@@ -59,8 +59,8 @@ seller.ready(function (err) {
 
   const buyer = m.buy(seller.key)
 
-  sellerLnd = new Lightning(seller, dazaarParameters, { implementation: 'lnd', info: lndOpts2 })
-  buyerLnd = new Lightning(buyer, dazaarParameters, { implementation: 'lnd', info: lndOpts1 })
+  sellerLnd = new Lightning(seller, dazaarParameters, { implementation: 'c-lightning', info: cOpts2 })
+  buyerLnd = new Lightning(buyer, dazaarParameters, { implementation: 'c-lightning', info: cOpts1 })
 
   buyer.on('validate', function () {
     console.log('remote validated us')

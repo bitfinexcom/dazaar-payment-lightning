@@ -105,8 +105,8 @@ module.exports = class DazaarLightningPayment {
     }
   }
 
-  pay (invoice, expected, cb) {
-    this.lightning.payInvoice(invoice.request, expected, cb)
+  pay (invoice, cb) {
+    this.lightning.payInvoice(invoice.request, cb)
   }
 
   connect (opts, cb) {

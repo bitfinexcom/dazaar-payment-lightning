@@ -156,7 +156,7 @@ module.exports = class Payment {
       .catch(err => cb(err))
   }
 
-  payInvoice(paymentRequest) {
+  payInvoice(paymentRequest, cb) {
     // console.log(paymentRequest)
     const self = this
     if (!cb) cb = noop
