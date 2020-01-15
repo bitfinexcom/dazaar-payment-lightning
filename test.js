@@ -179,7 +179,7 @@ test('lnd -> lnd dazaar payment', async t => {
   })
 })
 
-ptest('c-lightning -> c-lightning dazaar payment', async t => {
+ptest.only('c-lightning -> c-lightning dazaar payment', async t => {
   const cLightningOpts1 = {
     lightningdPath: './.c1/regtest/lightning-rpc'
   }
@@ -191,8 +191,8 @@ ptest('c-lightning -> c-lightning dazaar payment', async t => {
   const sellerId = 'seller'
   const buyerId = 'buyer'
 
-  const cPay1 = new cLightning(sellerId, [buyerId], cLightningOpts1)
-  const cPay2 = new cLightning(sellerId, [buyerId], cLightningOpts2)
+  const cPay1 = new cLightning(sellerId, cLightningOpts1)
+  const cPay2 = new cLightning(sellerId, cLightningOpts2)
 
   await Promise.all([
     cPay1.init(),
