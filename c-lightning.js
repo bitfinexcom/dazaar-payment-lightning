@@ -119,8 +119,10 @@ module.exports = class Payment {
           filterInvoice(invoice)
           return tail(++index)
         })
-        // CHECK: error handling
-        .catch(console.error)
+        .catch(err => {
+          sub.emit('warning', err)
+          return
+        })
     }
 
     function filterInvoice (invoice) {
@@ -157,7 +159,6 @@ module.exports = class Payment {
   }
 
   payInvoice(paymentRequest, cb) {
-    // console.log(paymentRequest)
     const self = this
     if (!cb) cb = noop
 

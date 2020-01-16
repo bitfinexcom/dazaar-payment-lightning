@@ -98,7 +98,7 @@ module.exports = class DazaarLightningPayment {
         seller: sellerKey.toString('hex')
       }
 
-      self.dazaar.send('lnd-pay-request', request)
+      self.dazaar.send('lnd-pay-request', request, sellerKey)
       self.lightning.requests.push(expectedInvoice)
 
       cb()
@@ -150,7 +150,7 @@ module.exports = class DazaarLightningPayment {
     const self = this
     this.dazaar.receive('lnd-pay-request', function (request, stream) {
       self.sell(request, stream.remotePublicKey, function (err, invoice) {
-        if (!err) self.dazaar.send('lnd-invoice', invoice)
+        if (!err) self.dazaar.send('lnd-invoice', invoice, stream)
       })
     })
 
