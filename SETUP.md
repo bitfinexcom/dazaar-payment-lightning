@@ -276,4 +276,6 @@ $ lncli1 listchannels
 $ lncli2 listchannels
 ```
 
+### Testing
+
 We now have 2 or more nodes setup with channels open to eachother and are ready to test out dazaar payments!
