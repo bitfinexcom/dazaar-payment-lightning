@@ -33,7 +33,7 @@ module.exports = class Payment {
 
       const nodeAddress = {
         pubkey: opts.id,
-        host: opts.host
+        address: opts.address
       }
 
       const request = {
@@ -234,8 +234,14 @@ function convertDazaarPayment (pay) {
       break
   }
 
-  const perSecond = Number(pay.amount) / (Number(pay.interval) * ratio)
+  let satoshiAmt
+
+  if (pay.currency === 'LightningSats') satoshiAmt = Number(pay.amount)
+  if (pay.currency === 'LightningBTC') satoshiAmt = toSats(Number(pay.amount))
+
+  const perSecond = satoshiAmt / (Number(pay.interval) * ratio)
   if (!perSecond) throw new Error('Invalid payment info')
+
   return perSecond
 }
 

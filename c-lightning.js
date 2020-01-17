@@ -26,7 +26,7 @@ module.exports = class Payment {
 
         if (peers.indexOf(peer => peer.pub_key = pubkey) >= 0) return cb()
 
-        const [host, port] = opts.host.split(':')
+        const [host, port] = opts.address.split(':')
 
         self.client.connect(opts.pubkey, host, port)
           .then(res => cb(null, res))
@@ -39,12 +39,18 @@ module.exports = class Payment {
     const self = this
     let perSecond = 0
 
-     if (typeof rate === 'object' && rate) { // dazaar card
+    if (typeof rate === 'object' && rate) { // dazaar card
       perSecond = convertDazaarPayment(rate)
     } else {
-      const match = rate.trim().match(/^(\d(?:\.\d+)?)\s*BTC\s*\/\s*s$/i)
-      if (!match) throw new Error('rate should have the form "n....nn BTC/s"')
-      perSecond = Number(match[1])
+      try {
+        const match = rate.trim().match(/^(\d(?:\.\d+)?)\s*BTC\s*\/\s*s$/i)
+        if (!match) throw new Error()
+        perSecond = Number(match[1]) * 10 ** 8
+      } catch {
+        const match = rate.trim().match(/^(\d+)(?:\.\d+)?\s*Sat\/\s*s$/i)
+        if (!match) throw new Error('rate should have the form "n....nn Sat/s" or "n...nn BTC/s"')
+        perSecond = Number(match[1])        
+      }
     }
 
     const sub = new EventEmitter()
@@ -77,7 +83,7 @@ module.exports = class Payment {
         const nextTime = i + 1 < activePayments.length ? activePayments[i + 1].time : now
 
         const consumed = perSecond * (nextTime - payment.time) / 1000
-        funds += fromSats(payment.amount) - consumed
+        funds += payment.amount - consumed
 
         return funds > 0 ? funds : 0
       }
@@ -117,6 +123,7 @@ module.exports = class Payment {
           const invoice = res.result
 
           filterInvoice(invoice)
+
           return tail(++index)
         })
         .catch(err => {
@@ -209,8 +216,8 @@ module.exports = class Payment {
 
 function noop () {}
 
-function fromSats (btcAmount) {
-  return btcAmount / 10 ** 8
+function toSats (btcAmount) {
+  return btcAmount * 10 ** 8
 }
 
 function convertDazaarPayment (pay) {
@@ -228,7 +235,12 @@ function convertDazaarPayment (pay) {
       break
   }
 
-  const perSecond = Number(pay.amount) / (Number(pay.interval) * ratio)
+  let satoshiAmt
+
+  if (pay.currency === 'LightningSats') satoshiAmt = Number(pay.amount)
+  if (pay.currency === 'LightningBTC') satoshiAmt = toSats(Number(pay.amount))
+
+  const perSecond = satoshiAmt / (Number(pay.interval) * ratio)
   if (!perSecond) throw new Error('Invalid payment info')
 
   return perSecond

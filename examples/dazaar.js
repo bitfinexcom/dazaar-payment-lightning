@@ -6,40 +6,44 @@ const market = require('../../dazaar/market')
 const lndOpts2 = {
   lnddir: './.lnd2',
   rpcPort: 'localhost:13009',
-  host: '127.0.0.1:9731',
-  network: 'regtest'
+  address: '127.0.0.1:9731',
+  network: 'regtest',
+  implementation: 'lnd'
 }
 
 const lndOpts1 = {
   lnddir: './.lnd1',
   rpcPort: 'localhost:12009',
-  host: '127.0.0.1:9734',
-  network: 'regtest'
+  address: '127.0.0.1:9734',
+  network: 'regtest',
+  implementation: 'lnd'
 }
 
 const cOpts2 = {
   lightningdDir: '.c2',
-  host: '127.0.0.1:9732',
-  network: 'regtest'
+  address: '127.0.0.1:9732',
+  network: 'regtest',
+  implementation: 'c-lightning'
 }
 
 const cOpts1 = {
   lightningdDir: './.c1',
-  host: '127.0.0.1:9733',
-  network: 'regtest'
+  address: '127.0.0.1:9733',
+  network: 'regtest',
+  implementation: 'c-lightning'
 }
 
 const dazaarParameters = {
   payto: 'dazaartest22',
-  currency: 'LightningBTC',
-  amount: '0.02',
-  unit: 'hours',
+  currency: 'LightningSats',
+  amount: '100',
+  unit: 'seconds',
   interval: 1
 }
 
 const m = market('./tmp')
 
-const feed = hypercore('./tmp/data')
+const feed = hypercore('./tmp/data1')
 
 let sellerLnd
 let buyerLnd
@@ -48,8 +52,7 @@ feed.append('valuable')
 
 const seller = m.sell(feed, {
   validate (remoteKey, cb) {
-    // seller.validate(remoteKey.toString('hex'))
-    console.log('this key wants our hypercore', remoteKey)
+    console.log('this key wants our hypercore 1', remoteKey)
     sellerLnd.validate(remoteKey, cb)
   }
 })
@@ -59,8 +62,8 @@ seller.ready(function (err) {
 
   const buyer = m.buy(seller.key)
 
-  sellerLnd = new Lightning(seller, dazaarParameters, { implementation: 'c-lightning', info: cOpts2 })
-  buyerLnd = new Lightning(buyer, dazaarParameters, { implementation: 'c-lightning', info: cOpts1 })
+  sellerLnd = new Lightning.seller(seller, dazaarParameters, cOpts2)  
+  buyerLnd = new Lightning.buyer(buyer, cOpts1)
 
   buyer.on('validate', function () {
     console.log('remote validated us')
@@ -80,13 +83,25 @@ seller.ready(function (err) {
   })
 
   setImmediate(function () {
-    buyerLnd.buy(800, seller.key, repeatValidate)
+    // buying flow
+    buyerLnd.buy(1000, function (err) {
+      repeatValidate()
+    })
 
-    function repeatValidate () {
+    // unrecognised invoice will be rejected
+    // setTimeout(() => {
+    //   sellerLnd.lightning.addInvoice('dazaar: unrecognised', 800, function (err, invoice) {
+    //     buyerLnd.pay(invoice, function (err) {
+    //       console.error(err)
+    //     })
+    //   })
+    // }, 2000)
+
+    function repeatValidate (err) {
       if (err) console.error(err)
       sellerLnd.validate(buyer.key, function (err, info) {
-        if (err) setTimeout(repeatValidate, 100)
-        console.log(info)
+        console.log(err, info)
+        setTimeout(repeatValidate, 2000)
       })
     }
   })

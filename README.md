@@ -14,7 +14,7 @@ const lightningOpts = {
 
 const paymentCard = {
   payto: 'dazaartest22',
-  currency: 'LightningBTC',
+  currency: 'LightningBTC', // may also be LightningSats
   amount: '0.002',
   unit: 'hours',
   interval: 1
@@ -30,18 +30,18 @@ const hypercore = require('hypercore')
 const m = market('./tmp')
 const feed = hypercore('./tmp/data')
 
-let pay
+let payee
 
 // instantiate a seller for a feed and equip it
 // with a validate function
 const seller = m.sell(feed, {
   validate (remoteKey, cb) {
-    pay.validate(remoteKey, cb)
+    payee.validate(remoteKey, cb)
   }
 })
 
 seller.ready(function (err) {
-  pay = new Payment(seller, paymentCard, lightningOpts)
+  payee = new Payment.seller(seller, paymentCard, lightningOpts)
   
   // payment now set up. dazaar logic follows ... 
 })
@@ -54,15 +54,15 @@ On a separate machine with the
 const buyer = m.buy(seller.key)
 
 // set up pay payment linked to the buyer
-const pay = Payment(buyer, paymentCard, lightningOpts)
+const payer = new Payment.buyer(buyer, lightningOpts)
 
 // buy an amount of feed
-pay..buy(800, cb)
+payer..buy(800, cb)
 ```
 
 ## API
-#### `const pay = dazaarLightning(actor, payment, options)`
-Create a new lightning payment instance associate to an actor (seller/buyer). `actor` should be a dazaar buyer or seller, `paymentCard` should be a dazaar payment card. Options include:
+#### `const pay = dazaarLightning(actor, paymentCard, options)`
+Create a new lightning payment instance associate to an actor (seller/buyer). `actor` should be a dazaar buyer or seller, `paymentCard` should be a dazaar payment card, specifying the rate in either `BTC` or `Sats`. Options include:
 ```js
 {
   lnddir: ..., // data directory of the lightning node
@@ -74,7 +74,7 @@ Create a new lightning payment instance associate to an actor (seller/buyer). `a
 ```
 
 #### `pay.buy(amount, cb)`
-A buyer can pay a specified amount for the stream that this buyer is registered to. `amount` shall be in the units specified by the payment info given at instantiation. Because a new buyer is instatiated for each stream, there is no need to specify more than the amount to be purchased.
+A buyer can pay a specified amount for the stream that this buyer is registered to. `amount` is specified in satoshis (1 x 10<sup>-8</sup> BTC). Because a new buyer is instatiated for each stream, there is no need to specify more than the amount to be purchased.
 
 #### `pay.validate(buyerKey, cb)`
 A seller can validate the time left for a given buyer. Returns `error` if there is no time left on the subscription. The method shall check whether the given buyer has a subscription set-up and instantiate one not already present.

@@ -5,7 +5,7 @@ const cLightning = require('./c-lightning.js')
 
 const MAX_SUBSCRIBER_CACHE = 500
 
-module.exports = class DazaarLightningPayment {
+module.exports.seller = class Seller {
   constructor (dazaar, payment, opts = {}) {
     this.dazaar = dazaar
     this.payment = payment
@@ -15,21 +15,9 @@ module.exports = class DazaarLightningPayment {
     this.subscribers = new Map()
 
     this.nodeInfo = {}
-    this.nodeInfo.host = opts.info.host
+    this.nodeInfo.address = opts.address
 
     this._setupExtensions()
-  }
-
-  initMaybe (cb) {
-    const self = this
-
-    if (this.nodeInfo.id) return cb()
-
-    this.lightning.getNodeId(function (err, nodeId) {
-      if (err) return cb(err)
-      self.nodeInfo.id = nodeId
-      cb()
-    })    
   }
 
   validate (buyer, cb) {
@@ -57,7 +45,7 @@ module.exports = class DazaarLightningPayment {
       tail.removeListener('update', onupdate)
       clearTimeout(timeout)
 
-      const time = tail.remainingTime()      
+      const time = tail.remainingTime()     
 
       if (time <= 0) return cb(new Error('No time left on subscription' + (timedout ? 'after timeout' : '')))
 
@@ -71,42 +59,13 @@ module.exports = class DazaarLightningPayment {
   sell (request, buyerKey, cb) {
     if (!cb) cb = noop
     const self = this
+
     this.connect(request, function (err, info) {
       if (err && err.code !== 2) return cb(err)
       self.validate(buyerKey, function (err, res) { // validate is called to initiate subscription
         self.lightning.addInvoice(self._filter(buyerKey), request.amount, cb)
       })
     })
-  }
-
-  buy (amount, sellerKey, cb) {
-    const self = this
-
-    this.initMaybe(oninit)
-
-    function oninit (err) {
-      if (err) return cb(err)
-
-      const request = {
-        amount,
-        buyerInfo: self.nodeInfo,
-      }
-
-      const expectedInvoice = {
-        amount,
-        buyer: self.dazaar.key.toString('hex'),
-        seller: sellerKey.toString('hex')
-      }
-
-      self.dazaar.send('lnd-pay-request', request, sellerKey)
-      self.lightning.requests.push(expectedInvoice)
-
-      cb()
-    }
-  }
-
-  pay (invoice, cb) {
-    this.lightning.payInvoice(invoice.request, cb)
   }
 
   connect (opts, cb) {
@@ -132,6 +91,7 @@ module.exports = class DazaarLightningPayment {
     if (this.subscribers.size >= MAX_SUBSCRIBER_CACHE) this._gc()
 
     const self = this
+
     const tail = this.lightning.subscription(this._filter(buyer), this.payment)
     this.subscribers.set(h, tail)
 
@@ -153,6 +113,79 @@ module.exports = class DazaarLightningPayment {
         if (!err) self.dazaar.send('lnd-invoice', invoice, stream)
       })
     })
+  }
+
+  static supports (payment) {
+    return payment.currency === ['LightningBTC', 'LightningSats']
+  }
+}
+
+module.exports.buyer = class Buyer {
+  constructor (dazaar, opts = {}) {
+    this.dazaar = dazaar
+
+    this.destroyed = false
+    this.lightning = node(opts)
+
+    this.nodeInfo = {}
+    this.nodeInfo.address = opts.address
+
+    this._setupExtensions()
+  }
+
+  initMaybe (cb) {
+    const self = this
+
+    if (this.nodeInfo.id) return cb()
+
+    this.lightning.getNodeId(function (err, nodeId) {
+      if (err) return cb(err)
+      self.nodeInfo.id = nodeId
+      cb()
+    })    
+  }
+
+  buy (amount, cb) {
+    const self = this
+
+    this.initMaybe(oninit)
+
+    function oninit (err) {
+      if (err) return cb(err)
+
+      const request = {
+        amount,
+        buyerInfo: self.nodeInfo,
+      }
+
+      const expectedInvoice = {
+        amount,
+        buyer: self.dazaar.key.toString('hex'),
+        seller: self.dazaar.seller.toString('hex')
+      }
+
+      self.dazaar.broadcast('lnd-pay-request', request)
+      self.lightning.requests.push(expectedInvoice)
+
+      cb()
+    }
+  }
+
+  pay (invoice, cb) {
+    this.lightning.payInvoice(invoice.request, cb)
+  }
+
+  connect (opts, cb) {
+    this.lightning.connect(opts.buyerInfo, cb)
+  }
+
+  destroy () {
+    if (this.destroyed) return
+    this.destroyed = true
+  }
+
+  _setupExtensions () {
+    const self = this
 
     this.dazaar.receive('lnd-invoice', function (invoice) {
       self.pay(invoice, function (err, payment) {
@@ -163,13 +196,13 @@ module.exports = class DazaarLightningPayment {
   }
 
   static supports (payment) {
-    return payment.currency === 'LightningBTC'
+    return payment.currency === ['LightningBTC', 'LightningSats']
   }
 }
 
 function node (opts) {
-  if (opts.implementation === 'lnd') return new lnd(opts.info)
-  if (opts.implementation === 'c-lightning') return new cLightning(opts.info)
+  if (opts.implementation === 'lnd') return new lnd(opts)
+  if (opts.implementation === 'c-lightning') return new cLightning(opts)
 
   throw new Error('unrecognised lightning node: specify lnd or c-lightning.')
 }
