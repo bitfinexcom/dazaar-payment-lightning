@@ -19,10 +19,17 @@ daemon=1
 txindex=1
 
 # user: lnd | password: password
-rpcauth=lnd:98670aa7dba2e75ef79c0583e929dd23$29cd17464f672688ca01b47fbf6bdfe49352cb8e90937dee7de0ddd76dc33e0d
+rpcauth=lnd:98670aa7dba2e75ef79c0583e929dd23$29cd17464f672688ca01b47fbf6bdfe49352cb8e90937dee7de0ddd76dc33e0d 
 zmqpubrawblock=tcp://127.0.0.1:28332
 zmqpubrawtx=tcp://127.0.0.1:28333
 ```
+
+To use your own authorisation info you can use bitcoin-rpcauth:
+```sh
+$ npm i -g bitcoin-rpcauth
+$ rpcauth --username=<username> --password=<password>
+# copy the returned string into bitcoin.conf
+``` 
 
 Start `bitcoind`:
 ```sh
@@ -269,4 +276,4 @@ $ lncli1 listchannels
 $ lncli2 listchannels
 ```
 
-### 
+We now have 2 or more nodes setup with channels open to eachother and are ready to test out dazaar payments!
