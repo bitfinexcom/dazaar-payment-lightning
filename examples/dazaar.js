@@ -36,7 +36,7 @@ const cOpts1 = {
 const dazaarParameters = {
   payto: 'dazaartest22',
   currency: 'LightningSats',
-  amount: '100',
+  amount: '200',
   unit: 'seconds',
   interval: 1
 }
@@ -84,25 +84,28 @@ seller.ready(function (err) {
 
   setImmediate(function () {
     // buying flow
-    buyerLnd.buy(1000, function (err) {
-      repeatValidate()
-    })
+    buyerLnd.buy(800, repeatBuy(800, 4000))  
 
     // unrecognised invoice will be rejected
-    // setTimeout(() => {
-    //   sellerLnd.lightning.addInvoice('dazaar: unrecognised', 800, function (err, invoice) {
-    //     buyerLnd.pay(invoice, function (err) {
-    //       console.error(err)
-    //     })
-    //   })
-    // }, 2000)
-
-    function repeatValidate (err) {
-      if (err) console.error(err)
-      sellerLnd.validate(buyer.key, function (err, info) {
-        console.log(err, info)
-        setTimeout(repeatValidate, 2000)
+    setTimeout(() => {
+      sellerLnd.lightning.addInvoice('dazaar: unrecognised', 800, function (err, invoice) {
+        buyerLnd.pay(invoice, function (err) {
+          console.error(err)
+        })
       })
+    }, 2000)
+
+    function repeatBuy (amount, interval) {
+      return (err) => {
+        if (err) return console.error(err)
+        sellerLnd.validate(buyer.key, function (err, info) {
+          console.log(info)
+          buyerLnd.buy(amount, function (err) {
+            if (err) return console.error(err)
+            setTimeout(repeatBuy(amount, interval), interval)
+          })
+        })
+      }
     }
   })
 })

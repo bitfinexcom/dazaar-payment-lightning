@@ -49,7 +49,7 @@ module.exports = class Payment {
       } catch {
         const match = rate.trim().match(/^(\d+)(?:\.\d+)?\s*Sat\/\s*s$/i)
         if (!match) throw new Error('rate should have the form "n....nn Sat/s" or "n...nn BTC/s"')
-        perSecond = Number(match[1])        
+        perSecond = Number(match[1])
       }
     }
 
@@ -74,7 +74,7 @@ module.exports = class Payment {
     sub.remainingFunds = function (minSeconds) {
       if (!minSeconds) minSeconds = 0
 
-      const now = Date.now() + minSeconds * 1000 
+      const now = Date.now() + minSeconds * 1000
       const funds = activePayments.reduce(leftoverFunds, 0)
       
       return funds
