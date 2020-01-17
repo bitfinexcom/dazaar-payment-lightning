@@ -61,8 +61,8 @@ payer..buy(800, cb)
 ```
 
 ## API
-#### `const pay = dazaarLightning(actor, paymentCard, options)`
-Create a new lightning payment instance associate to an actor (seller/buyer). `actor` should be a dazaar buyer or seller, `paymentCard` should be a dazaar payment card, specifying the rate in either `BTC` or `Sats`. Options include:
+#### `const pay = dazaarLightning(actor, payment, options)`
+Create a new lightning payment instance associate to an actor (seller/buyer). `actor` should be a dazaar buyer or seller, `payment` may either be a dazaar payment card, or a string specifying the per second rate in either `BTC` or `Sats`, such as `200 Sats/s`. Options include:
 ```js
 {
   lnddir: ..., // data directory of the lightning node
