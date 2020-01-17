@@ -82,5 +82,9 @@ A seller can validate the time left for a given buyer. Returns `error` if there 
 #### `pay.destroy()`
 Destroy the payment provider
 
+## Setup
+
+Refer to the [setup guide](SETUP.md) for instructions on how to install a lightning node implementation and set up a test environment.
+
 ## License
 MIT
