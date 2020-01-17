@@ -1,7 +1,7 @@
-const Lightning = require('../lightning.js')
+const Lightning = require('../lightning')
 const hypercore = require('hypercore')
 const pump = require('pump')
-const market = require('../../dazaar/market')
+const market = require('dazaar/market')
 
 const lndOpts = {
   lnddir: './.lnd1',
@@ -47,8 +47,8 @@ seller.ready(function (err) {
 
   const buyer = m.buy(seller.key)
 
-  sellerLnd = new Lightning.seller(seller, dazaarParameters, lndOpts)
-  buyerLnd = new Lightning.buyer(buyer, cOpts)
+  sellerLnd = new Lightning.seller(seller, '200 Sat/s', cOpts)
+  buyerLnd = new Lightning.buyer(buyer, lndOpts)
 
   buyer.on('validate', function () {
     console.log('remote validated us')

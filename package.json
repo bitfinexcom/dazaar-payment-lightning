@@ -9,15 +9,14 @@
   "author": "Christophe Diederichs",
   "license": "ISC",
   "dependencies": {
-    "dazaar": "github:bitfinexcom/dazaar",
     "grpc-lnd": "^1.0.1",
-    "hypercore": "^8.4.0",
-    "nanoassert": "^2.0.0",
-    "pump": "^3.0.0",
-    "through2": "^3.0.1",
     "unixson": "^1.0.0"
   },
-  "devDependencies": {},
+  "devDependencies": {
+    "pump": "^3.0.0",
+    "hypercore": "^8.4.0",
+    "dazaar": "github:bitfinexcom/dazaar"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/chm-diederichs/dazaar-lightning.git"

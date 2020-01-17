@@ -1,7 +1,7 @@
-const lnd = require('./lnd.js')
-const metadata = require('../dazaar-payment/metadata')
+const Lnd = require('./lnd')
+const CLightning = require('./c-lightning')
+const metadata = require('./metadata')
 const { EventEmitter } = require('events')
-const cLightning = require('./c-lightning.js')
 
 const MAX_SUBSCRIBER_CACHE = 500
 
@@ -46,7 +46,7 @@ module.exports.seller = class Seller {
       clearTimeout(timeout)
 
       const time = tail.remainingTime()
-      
+
       if (time <= 0) return cb(new Error('No time left on subscription' + (timedout ? 'after timeout' : '')))
 
       cb(null, {
@@ -201,8 +201,8 @@ module.exports.buyer = class Buyer {
 }
 
 function node (opts) {
-  if (opts.implementation === 'lnd') return new lnd(opts)
-  if (opts.implementation === 'c-lightning') return new cLightning(opts)
+  if (opts.implementation === 'lnd') return new Lnd(opts)
+  if (opts.implementation === 'c-lightning') return new CLightning(opts)
 
   throw new Error('unrecognised lightning node: specify lnd or c-lightning.')
 }

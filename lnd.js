@@ -1,8 +1,6 @@
 const LndGrpc = require('grpc-lnd')
-const through = require('through2')
 const path = require('path')
 const { EventEmitter } = require('events')
-const protoLoader = require('@grpc/proto-loader')
 const fs = require('fs')
 
 process.env.GRPC_SSL_CIPHER_SUITES = 'HIGH+ECDSA'
