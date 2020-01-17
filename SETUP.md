@@ -1,6 +1,6 @@
 
 # Setup
-A guide to setting up and connecting lightning nodes on bitcoin regtest network for testing purposes!
+A guide to setting up and connecting lightning nodes on bitcoin regtest network for testing purposes.
 
 ## bitcoind
 If bitcoind is not already running on regtest network, we need to set this up.
