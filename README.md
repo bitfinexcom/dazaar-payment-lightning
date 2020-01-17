@@ -12,7 +12,7 @@ const lightningOpts = {
   implementation: ... // 'c-lightning' or 'lnd'
 }
 
-const dazaarParameters = {
+const paymentCard = {
   payto: 'dazaartest22',
   currency: 'LightningBTC',
   amount: '0.002',
