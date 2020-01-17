@@ -23,7 +23,7 @@ const paymentCard = {
 
 ### Seller
 ```js
-const Payment = require('dazaar-ln-payment')
+const payment = require('dazaar-ln-payment')
 const market = require('dazaar/market')
 const hypercore = require('hypercore')
 
@@ -41,7 +41,7 @@ const seller = m.sell(feed, {
 })
 
 seller.ready(function (err) {
-  payee = new Payment.Seller(seller, paymentCard, lightningOpts)
+  payee = new payment.Seller(seller, paymentCard, lightningOpts)
   
   // payment now set up. dazaar logic follows ... 
 })
@@ -54,7 +54,7 @@ On a separate machine with the
 const buyer = m.buy(seller.key)
 
 // set up pay payment linked to the buyer
-const payer = new Payment.Buyer(buyer, lightningOpts)
+const payer = new payment.Buyer(buyer, lightningOpts)
 
 // buy an amount of feed
 payer..buy(800, cb)
