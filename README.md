@@ -61,7 +61,7 @@ pay..buy(800, cb)
 ```
 
 ## API
-`const pay = dazaarLightning(actor, payment, options)`
+#### `const pay = dazaarLightning(actor, payment, options)`
 Create a new lightning payment instance associate to an actor (seller/buyer). `actor` should be a dazaar buyer or seller, `paymentCard` should be a dazaar payment card. Options include:
 ```js
 {
@@ -73,13 +73,13 @@ Create a new lightning payment instance associate to an actor (seller/buyer). `a
 }
 ```
 
-`pay.buy(amount, cb)`
+#### `pay.buy(amount, cb)`
 A buyer can pay a specified amount for the stream that this buyer is registered to. `amount` shall be in the units specified by the payment info given at instantiation. Because a new buyer is instatiated for each stream, there is no need to specify more than the amount to be purchased.
 
-`pay.validate(buyerKey, cb)`
+#### `pay.validate(buyerKey, cb)`
 A seller can validate the time left for a given buyer. Returns `error` if there is no time left on the subscription. The method shall check whether the given buyer has a subscription set-up and instantiate one not already present.
 
-`pay.destroy()`
+#### `pay.destroy()`
 Destroy the payment provider
 
 ## License
