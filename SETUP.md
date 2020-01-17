@@ -78,7 +78,7 @@ $ make check
 
 ## Install c-lightning
 
- Install c-lightning from source using the following instructions for MacOS taken from the c-lightning [INTALL.md] (https://github.com/ElementsProject/lightning/blob/master/doc/INSTALL.md):
+ Install c-lightning from source using the following instructions for MacOS taken from the c-lightning [INTALL.md](https://github.com/ElementsProject/lightning/blob/master/doc/INSTALL.md):
 
 Install dependencies: 
 
