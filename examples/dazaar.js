@@ -3,15 +3,7 @@ const hypercore = require('hypercore')
 const pump = require('pump')
 const market = require('../../dazaar/market')
 
-const lndOpts2 = {
-  lnddir: './.lnd2',
-  rpcPort: 'localhost:13009',
-  address: '127.0.0.1:9731',
-  network: 'regtest',
-  implementation: 'lnd'
-}
-
-const lndOpts1 = {
+const lndOpts = {
   lnddir: './.lnd1',
   rpcPort: 'localhost:12009',
   address: '127.0.0.1:9734',
@@ -19,15 +11,8 @@ const lndOpts1 = {
   implementation: 'lnd'
 }
 
-const cOpts2 = {
-  lightningdDir: '.c2',
-  address: '127.0.0.1:9732',
-  network: 'regtest',
-  implementation: 'c-lightning'
-}
-
-const cOpts1 = {
-  lightningdDir: './.c1',
+const cOpts = {
+  lightningdDir: '.c1',
   address: '127.0.0.1:9733',
   network: 'regtest',
   implementation: 'c-lightning'
@@ -62,8 +47,8 @@ seller.ready(function (err) {
 
   const buyer = m.buy(seller.key)
 
-  sellerLnd = new Lightning.seller(seller, dazaarParameters, cOpts2)  
-  buyerLnd = new Lightning.buyer(buyer, cOpts1)
+  sellerLnd = new Lightning.seller(seller, dazaarParameters, lndOpts)
+  buyerLnd = new Lightning.buyer(buyer, cOpts)
 
   buyer.on('validate', function () {
     console.log('remote validated us')
@@ -84,7 +69,7 @@ seller.ready(function (err) {
 
   setImmediate(function () {
     // buying flow
-    buyerLnd.buy(800, repeatBuy(800, 4000))  
+    buyerLnd.buy(800, repeatBuy(800, 4000))
 
     // unrecognised invoice will be rejected
     setTimeout(() => {
@@ -99,7 +84,7 @@ seller.ready(function (err) {
       return (err) => {
         if (err) return console.error(err)
         sellerLnd.validate(buyer.key, function (err, info) {
-          console.log(info)
+          console.log(err, info)
           buyerLnd.buy(amount, function (err) {
             if (err) return console.error(err)
             setTimeout(repeatBuy(amount, interval), interval)

@@ -76,7 +76,7 @@ module.exports = class Payment {
 
       const now = Date.now() + minSeconds * 1000
       const funds = activePayments.reduce(leftoverFunds, 0)
-      
+
       return funds
 
       function leftoverFunds (funds, payment, i) {
@@ -112,7 +112,6 @@ module.exports = class Payment {
         })
         .catch(err => {
           sub.emit('warning', err)
-          return
         })
     }
 
@@ -128,12 +127,11 @@ module.exports = class Payment {
         })
         .catch(err => {
           sub.emit('warning', err)
-          return
         })
     }
 
     function filterInvoice (invoice) {
-      if (invoice.description !== filter) return 
+      if (invoice.description !== filter) return
 
       const amount = parseInt(invoice.msatoshi) / 1000
       const time = parseInt(invoice.paid_at) * 1000
@@ -153,7 +151,7 @@ module.exports = class Payment {
       .digest('base64')
 
     const amountMsat = amount * 1000
-    
+
     return this.client.invoice(amountMsat, label, filter)
       .then(res => {
         const invoice = {
@@ -165,7 +163,7 @@ module.exports = class Payment {
       .catch(err => cb(err))
   }
 
-  payInvoice(paymentRequest, cb) {
+  payInvoice (paymentRequest, cb) {
     const self = this
     if (!cb) cb = noop
 
@@ -187,16 +185,16 @@ module.exports = class Payment {
 
         const index = self.requests.findIndex(matchRequest(invoice))
         if (index === -1) return fail()
-        
+
         self.requests.splice(index, 1)
-        
+
         self.client.pay(paymentRequest)
           .then(payment => {
             if (payment.error) return cb(new Error(payment.error.message))
 
             cb(null, payment)
           })
-          .catch(err => cb(err))          
+          .catch(err => cb(err))
       })
       .catch(err => cb(err))
 
@@ -206,9 +204,9 @@ module.exports = class Payment {
 
     function matchRequest (inv) {
       return req => {
-        return req.buyer === inv.buyer 
-          && req.seller === inv.seller 
-          && req.amount === inv.amount
+        return req.buyer === inv.buyer &&
+          req.seller === inv.seller &&
+          req.amount === inv.amount
       }
     }
   }

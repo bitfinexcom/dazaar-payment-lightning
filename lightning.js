@@ -40,13 +40,13 @@ module.exports.seller = class Seller {
       if (tail.active()) onsynced()
     }
 
-    function onsynced () {      
+    function onsynced () {
       tail.removeListener('synced', onsynced)
       tail.removeListener('update', onupdate)
       clearTimeout(timeout)
 
-      const time = tail.remainingTime()     
-
+      const time = tail.remainingTime()
+      
       if (time <= 0) return cb(new Error('No time left on subscription' + (timedout ? 'after timeout' : '')))
 
       cb(null, {
@@ -142,7 +142,7 @@ module.exports.buyer = class Buyer {
       if (err) return cb(err)
       self.nodeInfo.id = nodeId
       cb()
-    })    
+    })
   }
 
   buy (amount, cb) {
@@ -155,7 +155,7 @@ module.exports.buyer = class Buyer {
 
       const request = {
         amount,
-        buyerInfo: self.nodeInfo,
+        buyerInfo: self.nodeInfo
       }
 
       const expectedInvoice = {

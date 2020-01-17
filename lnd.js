@@ -52,9 +52,15 @@ module.exports = class Payment {
     if (typeof rate === 'object' && rate) { // dazaar card
       perSecond = convertDazaarPayment(rate)
     } else {
-      const match = rate.trim().match(/^(\d(?:\.\d+)?)\s*BTC\s*\/\s*s$/i)
-      if (!match) throw new Error('rate should have the form "n....nn BTC/s"')
-      perSecond = Number(match[1])
+      try {
+        const match = rate.trim().match(/^(\d(?:\.\d+)?)\s*BTC\s*\/\s*s$/i)
+        if (!match) throw new Error()
+        perSecond = Number(match[1]) * 10 ** 8
+      } catch {
+        const match = rate.trim().match(/^(\d+)(?:\.\d+)?\s*Sat\/\s*s$/i)
+        if (!match) throw new Error('rate should have the form "n....nn Sat/s" or "n...nn BTC/s"')
+        perSecond = Number(match[1])
+      }
     }
 
     const sub = new EventEmitter()
@@ -84,14 +90,14 @@ module.exports = class Payment {
 
       const now = Date.now() + minSeconds * 1000
       const funds = activePayments.reduce(leftoverFunds, 0)
-      
+
       return funds
 
       function leftoverFunds (funds, payment, i) {
         const nextTime = i + 1 < activePayments.length ? activePayments[i + 1].time : now
 
         const consumed = perSecond * (nextTime - payment.time) / 1000
-        funds += fromSats(payment.amount) - consumed
+        funds += payment.amount - consumed
 
         return funds > 0 ? funds : 0
       }
@@ -116,7 +122,7 @@ module.exports = class Payment {
         if (err) {
           sub.destroy()
           sub.emit('warning', err)
-          return 
+          return
         }
 
         const dazaarPayments = res.invoices
@@ -164,11 +170,11 @@ module.exports = class Payment {
       if (err) return cb(err)
 
       // invoice verification logic
-      const [ label, info ] = details.description.split(':')
-      
+      const [label, info] = details.description.split(':')
+
       if (label !== 'dazaar') return fail()
 
-      const [ seller, buyer ] = info.trim().split(' ')
+      const [seller, buyer] = info.trim().split(' ')
 
       const invoice = {
         buyer,
@@ -178,9 +184,9 @@ module.exports = class Payment {
 
       const index = self.requests.findIndex(matchRequest(invoice))
       if (index === -1) return fail()
-      
+
       self.requests.splice(index, 1)
-        
+
       const call = self.client.sendPayment()
       call.write({
         payment_request: paymentRequest
@@ -188,7 +194,7 @@ module.exports = class Payment {
 
       call.on('data', function (payment) {
         if (payment.payment_error === '') return cb(null, payment)
-        return cb (new Error(payment.payment_error))
+        return cb(new Error(payment.payment_error))
       })
     })
 
@@ -198,16 +204,16 @@ module.exports = class Payment {
 
     function matchRequest (inv) {
       return req => {
-        return req.buyer === inv.buyer 
-          && req.seller === inv.seller 
-          && req.amount === inv.amount
+        return req.buyer === inv.buyer &&
+          req.seller === inv.seller &&
+          req.amount === inv.amount
       }
     }
   }
 
   earnings () {
     const earnings = {}
-    for (let user of this.users) {
+    for (const user of this.users) {
       earnings[user] = this.settled.reduce(function (acc, payment) {
         if (payment.ref.split(':')[1] !== user) return acc
         return acc + payment.amount
@@ -247,8 +253,4 @@ function convertDazaarPayment (pay) {
 
 function toSats (btcAmount) {
   return btcAmount * 10 ** 8
-}
-
-function fromSats (btcAmount) {
-  return btcAmount / 10 ** 8
 }

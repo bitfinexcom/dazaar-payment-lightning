@@ -61,8 +61,9 @@ payer..buy(800, cb)
 ```
 
 ## API
-#### `const pay = dazaarLightning(actor, payment, options)`
-Create a new lightning payment instance associate to an actor (seller/buyer). `actor` should be a dazaar buyer or seller, `payment` may either be a dazaar payment card, or a string specifying the per second rate in either `BTC` or `Sats`, such as `200 Sats/s`. Options include:
+### Seller
+#### `const payee = dazaarLightning.seller(seller, payment, options)`
+Create a new lightning payment instance associated to a seller. `seller` should be a dazaar seller instance, `payment` may either be a dazaar payment card, or a string specifying the per second rate in either `BTC` or `Sats`, such as `200 Sats/s`. Options include:
 ```js
 {
   lnddir: ..., // data directory of the lightning node
@@ -73,13 +74,20 @@ Create a new lightning payment instance associate to an actor (seller/buyer). `a
 }
 ```
 
-#### `pay.buy(amount, cb)`
-A buyer can pay a specified amount for the stream that this buyer is registered to. `amount` is specified in satoshis (1 x 10<sup>-8</sup> BTC). Because a new buyer is instatiated for each stream, there is no need to specify more than the amount to be purchased.
-
-#### `pay.validate(buyerKey, cb)`
+#### `payee.validate(buyerKey, cb)`
 A seller can validate the time left for a given buyer. Returns `error` if there is no time left on the subscription. The method shall check whether the given buyer has a subscription set-up and instantiate one not already present.
 
-#### `pay.destroy()`
+#### `payee.destroy()`
+Destroy the payment provider
+
+### Buyer
+#### `const payer = dazaarLightning.buyer(buyer, options)`
+Create a new lightning payment instance associated to a buyer. `buyer` should be a dazaar buyer instance. Options are the same as above.
+
+#### `payer.buy(amount, cb)`
+Pay a specified amount for the stream that this buyer is registered to. `amount` is specified in satoshis (1 x 10<sup>-8</sup> BTC). Because a new buyer is instatiated for each stream, there is no need to specify more than the amount to be purchased.
+
+#### `payer.destroy()`
 Destroy the payment provider
 
 ## Setup
