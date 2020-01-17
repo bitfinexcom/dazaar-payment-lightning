@@ -1,7 +1,5 @@
 const LndGrpc = require('grpc-lnd')
-const path = require('path')
 const { EventEmitter } = require('events')
-const fs = require('fs')
 
 process.env.GRPC_SSL_CIPHER_SUITES = 'HIGH+ECDSA'
 
@@ -27,7 +25,7 @@ module.exports = class Payment {
     this.client.listPeers({}, function (err, res) {
       if (err) return cb(err)
 
-      if (res.peers.indexOf(peer => peer.pub_key = nodeId) >= 0) return cb()
+      if (res.peers.indexOf(peer => peer.pub_key = opts.id) >= 0) return cb()
 
       const nodeAddress = {
         pubkey: opts.id,
@@ -140,7 +138,6 @@ module.exports = class Payment {
   }
 
   addInvoice (filter, amount, cb) {
-    const self = this
     if (!cb) cb = noop
 
     this.client.addInvoice({

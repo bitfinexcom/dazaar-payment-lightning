@@ -41,7 +41,7 @@ const seller = m.sell(feed, {
 })
 
 seller.ready(function (err) {
-  payee = new Payment.seller(seller, paymentCard, lightningOpts)
+  payee = new Payment.Seller(seller, paymentCard, lightningOpts)
   
   // payment now set up. dazaar logic follows ... 
 })
@@ -54,7 +54,7 @@ On a separate machine with the
 const buyer = m.buy(seller.key)
 
 // set up pay payment linked to the buyer
-const payer = new Payment.buyer(buyer, lightningOpts)
+const payer = new Payment.Buyer(buyer, lightningOpts)
 
 // buy an amount of feed
 payer..buy(800, cb)
@@ -62,7 +62,7 @@ payer..buy(800, cb)
 
 ## API
 ### Seller
-#### `const payee = dazaarLightning.seller(seller, payment, options)`
+#### `const payee = dazaarLightning.Seller(seller, payment, options)`
 Create a new lightning payment instance associated to a seller. `seller` should be a dazaar seller instance, `payment` may either be a dazaar payment card, or a string specifying the per second rate in either `BTC` or `Sats`, such as `200 Sats/s`. Options include:
 ```js
 {
@@ -81,7 +81,7 @@ A seller can validate the time left for a given buyer. Returns `error` if there 
 Destroy the payment provider
 
 ### Buyer
-#### `const payer = dazaarLightning.buyer(buyer, options)`
+#### `const payer = dazaarLightning.Buyer(buyer, options)`
 Create a new lightning payment instance associated to a buyer. `buyer` should be a dazaar buyer instance. Options are the same as above.
 
 #### `payer.buy(amount, cb)`

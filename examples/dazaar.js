@@ -18,7 +18,7 @@ const cOpts = {
   implementation: 'c-lightning'
 }
 
-const dazaarParameters = {
+const paymentCard = {
   payto: 'dazaartest22',
   currency: 'LightningSats',
   amount: '200',
@@ -47,8 +47,8 @@ seller.ready(function (err) {
 
   const buyer = m.buy(seller.key)
 
-  sellerLnd = new Lightning.seller(seller, '200 Sat/s', cOpts)
-  buyerLnd = new Lightning.buyer(buyer, lndOpts)
+  sellerLnd = new Lightning.Seller(seller, '200 Sat/s', cOpts)
+  buyerLnd = new Lightning.Buyer(buyer, lndOpts)
 
   buyer.on('validate', function () {
     console.log('remote validated us')
@@ -74,6 +74,7 @@ seller.ready(function (err) {
     // unrecognised invoice will be rejected
     setTimeout(() => {
       sellerLnd.lightning.addInvoice('dazaar: unrecognised', 800, function (err, invoice) {
+        if (err) throw err
         buyerLnd.pay(invoice, function (err) {
           console.error(err)
         })
@@ -82,11 +83,11 @@ seller.ready(function (err) {
 
     function repeatBuy (amount, interval) {
       return (err) => {
-        if (err) return console.error(err)
+        if (err) throw err
         sellerLnd.validate(buyer.key, function (err, info) {
           console.log(err, info)
           buyerLnd.buy(amount, function (err) {
-            if (err) return console.error(err)
+            if (err) throw err
             setTimeout(repeatBuy(amount, interval), interval)
           })
         })

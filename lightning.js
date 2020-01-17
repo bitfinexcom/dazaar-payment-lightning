@@ -1,11 +1,10 @@
 const Lnd = require('./lnd')
 const CLightning = require('./c-lightning')
 const metadata = require('./metadata')
-const { EventEmitter } = require('events')
 
 const MAX_SUBSCRIBER_CACHE = 500
 
-module.exports.seller = class Seller {
+module.exports.Seller = class Seller {
   constructor (dazaar, payment, opts = {}) {
     this.dazaar = dazaar
     this.payment = payment
@@ -90,8 +89,6 @@ module.exports.seller = class Seller {
     if (this.subscribers.has(h)) return this.subscribers.get(h)
     if (this.subscribers.size >= MAX_SUBSCRIBER_CACHE) this._gc()
 
-    const self = this
-
     const tail = this.lightning.subscription(this._filter(buyer), this.payment)
     this.subscribers.set(h, tail)
 
@@ -120,7 +117,7 @@ module.exports.seller = class Seller {
   }
 }
 
-module.exports.buyer = class Buyer {
+module.exports.Buyer = class Buyer {
   constructor (dazaar, opts = {}) {
     this.dazaar = dazaar
 
@@ -206,3 +203,5 @@ function node (opts) {
 
   throw new Error('unrecognised lightning node: specify lnd or c-lightning.')
 }
+
+function noop () {}
