@@ -24,7 +24,7 @@ module.exports = class Payment {
       .then(res => {
         const peers = res.result.peers
 
-        if (peers.indexOf(peer => peer.pub_key = opts.id) >= 0) return cb()
+        if (peers.indexOf(peer => peer.pub_key === opts.id) >= 0) return cb()
 
         const [host, port] = opts.address.split(':')
 

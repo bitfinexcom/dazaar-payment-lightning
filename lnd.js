@@ -25,7 +25,7 @@ module.exports = class Payment {
     this.client.listPeers({}, function (err, res) {
       if (err) return cb(err)
 
-      if (res.peers.indexOf(peer => peer.pub_key = opts.id) >= 0) return cb()
+      if (res.peers.indexOf(peer => peer.pub_key === opts.id) >= 0) return cb()
 
       const nodeAddress = {
         pubkey: opts.id,
