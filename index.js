@@ -1,11 +1,14 @@
 const Lnd = require('./lnd')
 const CLightning = require('./c-lightning')
 const metadata = require('./metadata')
+const { EventEmitter } = require('events')
 
 const MAX_SUBSCRIBER_CACHE = 500
 
-module.exports.Seller = class Seller {
+module.exports = class Payment extends EventEmitter {
   constructor (dazaar, payment, opts = {}) {
+    super()
+    
     this.dazaar = dazaar
     this.payment = payment
 
@@ -19,9 +22,21 @@ module.exports.Seller = class Seller {
     this._setupExtensions()
   }
 
-  validate (buyer, cb) {
+  initMaybe (cb) {
+    const self = this
+
+    if (this.nodeInfo.id) return cb()
+
+    this.lightning.getNodeId(function (err, nodeId) {
+      if (err) return cb(err)
+      self.nodeInfo.id = nodeId
+      cb()
+    })
+  }
+
+  validate (buyerKey, cb) {
     if (this.destroyed) return process.nextTick(cb, new Error('Seller is shutting down'))
-    const tail = this._get(buyer)
+    const tail = this._get(buyerKey)
 
     const timeout = setTimeout(ontimeout, 20000)
     let timedout = false
@@ -55,6 +70,10 @@ module.exports.Seller = class Seller {
     }
   }
 
+  connect (opts, cb) {
+    this.lightning.connect(opts.buyerInfo, cb)
+  }
+
   sell (request, buyerKey, cb) {
     if (!cb) cb = noop
     const self = this
@@ -67,8 +86,34 @@ module.exports.Seller = class Seller {
     })
   }
 
-  connect (opts, cb) {
-    this.lightning.connect(opts.buyerInfo, cb)
+  buy (buyer, amount, auth, cb) {
+    const self = this
+
+    this.initMaybe(oninit)
+
+    function oninit (err) {
+      if (err) return cb(err)
+
+      const request = {
+        amount,
+        buyerInfo: self.nodeInfo
+      }
+
+      const expectedInvoice = {
+        amount,
+        buyer: self.dazaar.key.toString('hex'),
+        seller: self.dazaar.seller.toString('hex')
+      }
+
+      self.dazaar.broadcast('lnd-pay-request', request)
+      self.lightning.requests.push(expectedInvoice)
+
+      cb()
+    }
+  }
+
+  pay (invoice, cb) {
+    this.lightning.payInvoice(invoice.request, cb)
   }
 
   destroy () {
@@ -107,93 +152,21 @@ module.exports.Seller = class Seller {
     const self = this
     this.dazaar.receive('lnd-pay-request', function (request, stream) {
       self.sell(request, stream.remotePublicKey, function (err, invoice) {
-        if (!err) self.dazaar.send('lnd-invoice', invoice, stream)
+        if (err) self.emit('error', err)
+        self.dazaar.send('lnd-invoice', invoice, stream)
       })
     })
-  }
-
-  static supports (payment) {
-    return payment.currency === ['LightningBTC', 'LightningSats']
-  }
-}
-
-module.exports.Buyer = class Buyer {
-  constructor (dazaar, opts = {}) {
-    this.dazaar = dazaar
-
-    this.destroyed = false
-    this.lightning = node(opts)
-
-    this.nodeInfo = {}
-    this.nodeInfo.address = opts.address
-
-    this._setupExtensions()
-  }
-
-  initMaybe (cb) {
-    const self = this
-
-    if (this.nodeInfo.id) return cb()
-
-    this.lightning.getNodeId(function (err, nodeId) {
-      if (err) return cb(err)
-      self.nodeInfo.id = nodeId
-      cb()
-    })
-  }
-
-  buy (amount, cb) {
-    const self = this
-
-    this.initMaybe(oninit)
-
-    function oninit (err) {
-      if (err) return cb(err)
-
-      const request = {
-        amount,
-        buyerInfo: self.nodeInfo
-      }
-
-      const expectedInvoice = {
-        amount,
-        buyer: self.dazaar.key.toString('hex'),
-        seller: self.dazaar.seller.toString('hex')
-      }
-
-      self.dazaar.broadcast('lnd-pay-request', request)
-      self.lightning.requests.push(expectedInvoice)
-
-      cb()
-    }
-  }
-
-  pay (invoice, cb) {
-    this.lightning.payInvoice(invoice.request, cb)
-  }
-
-  connect (opts, cb) {
-    this.lightning.connect(opts.buyerInfo, cb)
-  }
-
-  destroy () {
-    if (this.destroyed) return
-    this.destroyed = true
-  }
-
-  _setupExtensions () {
-    const self = this
 
     this.dazaar.receive('lnd-invoice', function (invoice) {
       self.pay(invoice, function (err, payment) {
-        // CHECK: error handling
-        if (err) console.error(err)
+        if (err) self.emit('error', err)
       })
     })
   }
 
   static supports (payment) {
-    return payment.currency === ['LightningBTC', 'LightningSats']
+    const supportedCurrencies = ['LightningBTC', 'LightningSats']
+    return supportedCurrencies.includes(payment.currency)
   }
 }
 
