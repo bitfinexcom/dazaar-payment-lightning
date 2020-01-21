@@ -1,8 +1,8 @@
 {
-  "name": "dazaar-lightning",
+  "name": "dazaar-payment-lightning",
   "version": "1.0.0",
   "description": "lightning payment api for dazaar stream services",
-  "main": "ligthning.js",
+  "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -19,7 +19,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/chm-diederichs/dazaar-lightning.git"
+    "url": "git+https://github.com/bitfinexcom/dazaar-payment-lightning.git"
   },
   "keywords": [
     "lightning",
@@ -28,7 +28,7 @@
     "payment"
   ],
   "bugs": {
-    "url": "https://github.com/chm-diederichs/dazaar-lightning/issues"
+    "url": "https://github.com/bitfinexcom/dazaar-payment-lightning/issues"
   },
-  "homepage": "https://github.com/chm-diederichs/dazaar-lightning#readme"
+  "homepage": "https://github.com/bitfinexcom/dazaar-payment-lightning#readme"
 }
