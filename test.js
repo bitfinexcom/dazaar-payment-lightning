@@ -382,7 +382,6 @@ test('lnd subscription: long sync', t => {
     })
 
     function repeat (n, cb) {
-      console.log(n)
       if (n === 0) return cb()
       c.lightning.requests.push({
         amount: 10,
