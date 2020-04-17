@@ -108,6 +108,7 @@ module.exports = class Payment {
 
           sub.synced = true
           sub.emit('synced')
+
           cb()
         })
         .catch(err => {
@@ -153,6 +154,8 @@ module.exports = class Payment {
 
     return this.client.invoice(amountMsat, label, filter)
       .then(res => {
+        if (res.error) throw new Error(res.error.message)
+
         const invoice = {
           request: res.result.bolt11,
           amount: amount
