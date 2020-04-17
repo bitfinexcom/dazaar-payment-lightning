@@ -7,7 +7,6 @@ module.exports = class Payment {
   constructor (opts) {
     this.client = LndGrpc(opts)
     this.invoiceStream = this.client.subscribeInvoices({})
-    this.lastIndex = 0
 
     this.requests = []
   }
@@ -113,7 +112,11 @@ module.exports = class Payment {
     }
 
     function sync () {
-      self.client.listInvoices({}, function (err, res) {
+      // make sure to sync all invoices
+      var num_max_invoices = Number.MAX_SAFE_INTEGER
+      var reversed = true
+
+      self.client.listInvoices({ num_max_invoices, reversed }, function (err, res) {
         // CHECK: error handling
         if (err) {
           sub.destroy()
