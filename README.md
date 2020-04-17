@@ -1,4 +1,4 @@
-# dazaar-lightning
+# dazaar-payment-lightning
 Lightning payment api for Dazaar stream services
 
 ## Usage

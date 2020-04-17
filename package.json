@@ -13,9 +13,10 @@
     "unixson": "^1.0.0"
   },
   "devDependencies": {
-    "pump": "^3.0.0",
+    "dazaar": "github:bitfinexcom/dazaar",
     "hypercore": "^8.4.0",
-    "dazaar": "github:bitfinexcom/dazaar"
+    "pump": "^3.0.0",
+    "tape": "^4.13.2"
   },
   "repository": {
     "type": "git",

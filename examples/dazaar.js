@@ -86,7 +86,7 @@ seller.ready(function (err) {
         if (err) throw err
         sellerLnd.validate(buyer.key, function (err, info) {
           console.log(err, info)
-          buyerLnd.buy('', amount, '', function (err) {
+          buyerLnd.buy(null, amount, null, function (err) {
             if (err) throw err
             setTimeout(repeatBuy(amount, interval), interval)
           })
