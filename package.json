@@ -10,6 +10,7 @@
   "license": "ISC",
   "dependencies": {
     "grpc-lnd": "^1.0.1",
+    "payment-tracker": "^0.1.0",
     "unixson": "^1.0.0"
   },
   "devDependencies": {

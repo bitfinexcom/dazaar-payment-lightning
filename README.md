@@ -17,7 +17,8 @@ const paymentCard = {
   currency: 'LightningBTC', // may also be LightningSats
   amount: '0.002',
   unit: 'hours',
-  interval: 1
+  interval: 1,
+  minSeconds: 1, // minimum amount of streamtime
 }
 ```
 
