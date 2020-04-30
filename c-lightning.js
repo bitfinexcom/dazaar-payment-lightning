@@ -1,5 +1,6 @@
 const crypto = require('crypto')
 const unixson = require('unixson')
+const clerk = require('payment-tracker')
 const { EventEmitter } = require('events')
 
 module.exports = class Payment {
@@ -35,19 +36,19 @@ module.exports = class Payment {
       .catch(err => cb(err))
   }
 
-  subscription (filter, rate) {
+  subscription (filter, paymentInfo) {
     const self = this
     let perSecond = 0
 
-    if (typeof rate === 'object' && rate) { // dazaar card
-      perSecond = convertDazaarPayment(rate)
+    if (typeof paymentInfo === 'object' && paymentInfo) { // dazaar card
+      perSecond = convertDazaarPayment(paymentInfo)
     } else {
       try {
-        const match = rate.trim().match(/^(\d(?:\.\d+)?)\s*BTC\s*\/\s*s$/i)
+        const match = paymentInfo.trim().match(/^(\d(?:\.\d+)?)\s*BTC\s*\/\s*s$/i)
         if (!match) throw new Error()
         perSecond = Number(match[1]) * 10 ** 8
       } catch {
-        const match = rate.trim().match(/^(\d+)(?:\.\d+)?\s*Sat\/\s*s$/i)
+        const match = paymentInfo.trim().match(/^(\d+)(?:\.\d+)?\s*Sat\/\s*s$/i)
         if (!match) throw new Error('rate should have the form "n....nn Sat/s" or "n...nn BTC/s"')
         perSecond = Number(match[1])
       }
@@ -55,38 +56,17 @@ module.exports = class Payment {
 
     const sub = new EventEmitter()
 
-    let activePayments = []
+    let account = clerk(perSecond, paymentInfo.minSeconds, paymentInfo.paymentDelay)
 
     sub.synced = false
     sync(tail)
 
-    sub.active = function (minSeconds) {
-      return sub.remainingFunds(minSeconds) > 0
-    }
+    sub.active = account.active
+    sub.remainingTime = account.remainingTime
+    sub.remainingFunds = account.remainingFunds
 
-    sub.destroy = function () {}
-
-    sub.remainingTime = function (minSeconds) {
-      const funds = sub.remainingFunds(minSeconds)
-      return Math.floor(Math.max(0, funds / perSecond * 1000))
-    }
-
-    sub.remainingFunds = function (minSeconds) {
-      if (!minSeconds) minSeconds = 0
-
-      const now = Date.now() + minSeconds * 1000
-      const funds = activePayments.reduce(leftoverFunds, 0)
-
-      return funds
-
-      function leftoverFunds (funds, payment, i) {
-        const nextTime = i + 1 < activePayments.length ? activePayments[i + 1].time : now
-
-        const consumed = perSecond * (nextTime - payment.time) / 1000
-        funds += payment.amount - consumed
-
-        return funds > 0 ? funds : 0
-      }
+    sub.destroy = function () {
+      sub.removeListener('data', filterInvoice)
     }
 
     return sub
@@ -99,15 +79,15 @@ module.exports = class Payment {
 
           sub._lastpayIndex = Math.max(...dazaarPayments.map(inv => inv.pay_index))
 
-          const payments = dazaarPayments.map(payment => ({
-            amount: payment.msatoshi / 1000,
-            time: parseInt(payment.paid_at) * 1000
-          }))
-
-          activePayments = [].concat(activePayments, payments)
+          const payments = dazaarPayments.forEach(payment => 
+            account.add({
+              amount: payment.msatoshi / 1000,
+              time: parseInt(payment.paid_at) * 1000
+            }))
 
           sub.synced = true
           sub.emit('synced')
+
           cb()
         })
         .catch(err => {
@@ -153,6 +133,8 @@ module.exports = class Payment {
 
     return this.client.invoice(amountMsat, label, filter)
       .then(res => {
+        if (res.error) throw new Error(res.error.message)
+
         const invoice = {
           request: res.result.bolt11,
           amount: amount

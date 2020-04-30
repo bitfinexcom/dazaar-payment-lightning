@@ -18,6 +18,7 @@ module.exports = class Payment extends EventEmitter {
 
     this.nodeInfo = {}
     this.nodeInfo.address = opts.address
+    this.supports = this.constructor.supports
 
     this._setupExtensions()
   }
@@ -78,7 +79,7 @@ module.exports = class Payment extends EventEmitter {
     if (!cb) cb = noop
     const self = this
 
-    this.connect(request, function (err, info) {
+    this.connect(request, function (err) {
       if (err && err.code !== 2) return cb(err)
       self.validate(buyerKey, function (err, res) { // validate is called to initiate subscription
         self.lightning.addInvoice(self._filter(buyerKey), request.amount, cb)
@@ -86,7 +87,7 @@ module.exports = class Payment extends EventEmitter {
     })
   }
 
-  buy (buyer, amount, auth, cb) {
+  buy (seller, amount, auth, cb) {
     const self = this
 
     this.initMaybe(oninit)
@@ -125,8 +126,8 @@ module.exports = class Payment extends EventEmitter {
     }
   }
 
-  _filter (buyer) {
-    return metadata(this.dazaar.key, buyer)
+  _filter (key, seller = true) {
+    return seller ? metadata(this.dazaar.key, key) : metadata(key, this.dazaar.key)
   }
 
   _get (buyer) {
