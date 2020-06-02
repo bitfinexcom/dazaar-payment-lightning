@@ -1,12 +1,17 @@
 const crypto = require('crypto')
+const path = require('path')
 const unixson = require('unixson')
 const clerk = require('payment-tracker')
 const { EventEmitter } = require('events')
 
 module.exports = class Payment {
   constructor (opts) {
-    this.client = unixson(opts.lightningdDir + '/regtest/lightning-rpc')
+    this.client = unixson(path.join(opts.lightningdDir, opts.network) + '/lightning-rpc')
     this.requests = []
+  }
+
+  init (cb) {
+    cb()
   }
 
   getNodeId (cb) {
@@ -34,6 +39,10 @@ module.exports = class Payment {
           .catch(err => cb(err))
       })
       .catch(err => cb(err))
+  }
+
+  destroy () {
+    this.requests = []
   }
 
   subscription (filter, paymentInfo) {
