@@ -145,9 +145,6 @@ module.exports = class Payment extends EventEmitter {
     })
 
     this.dazaar.receive('lnd-invoice', function (invoice) {
-      self.pay(invoice, function (err, payment) {
-        if (err) self.emit('error', err)
-      })
     })
   }
 
