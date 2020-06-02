@@ -80,22 +80,11 @@ module.exports = class Payment extends EventEmitter {
     })
   }
 
-  connect (opts, cb) {
-    this.initMaybe(() => {
-      this.lightning.connect(opts.buyerInfo, cb)
-    })
-  }
-
   sell (request, buyerKey, cb) {
     if (!cb) cb = noop
     const self = this
 
-    this.connect(request, function (err) {
-      if (err && err.code !== 2) return cb(err)
-      self.validate(buyerKey, function (err, res) { // validate is called to initiate subscription
-        self.lightning.addInvoice(self._filter(buyerKey), request.amount, cb)
-      })
-    })
+    self.lightning.addInvoice(self._filter(buyerKey), request.amount, cb)
   }
 
   buy (seller, amount, auth, cb) {
@@ -106,26 +95,10 @@ module.exports = class Payment extends EventEmitter {
     function oninit (err) {
       if (err) return cb(err)
 
-      const request = {
-        amount,
-        buyerInfo: self.nodeInfo
-      }
-
-      const expectedInvoice = {
-        amount,
-        buyer: self.dazaar.key.toString('hex'),
-        seller: self.dazaar.seller.toString('hex')
-      }
-
-      self.dazaar.broadcast('lnd-pay-request', request)
-      self.lightning.requests.push(expectedInvoice)
+      self.dazaar.broadcast('lnd-pay-request', amount)
 
       cb()
     }
-  }
-
-  pay (invoice, cb) {
-    this.lightning.payInvoice(invoice.request, cb)
   }
 
   destroy () {

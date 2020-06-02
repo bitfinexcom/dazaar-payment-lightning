@@ -1,4 +1,5 @@
 const LndGrpc = require('lnd-grpc')
+const lndconnect = require('lndconnect')
 const clerk = require('payment-tracker')
 const { EventEmitter } = require('events')
 
@@ -6,6 +7,12 @@ process.env.GRPC_SSL_CIPHER_SUITES = 'HIGH+ECDSA'
 
 module.exports = class Payment {
   constructor (opts) {
+    opts.lndconnectUri = lndconnect.encode({
+      cert: Buffer.from(opts.cert, 'base64').toString('hex'),
+      macaroon: Buffer.from(opts.cert, 'base64').toString(),
+      host: opts.host
+    }
+
     this.client = new LndGrpc(opts)
     this.invoiceStream = null
 
@@ -62,28 +69,6 @@ module.exports = class Payment {
   destroy () {
     this.requests = []
     this.client.disconnect()
-  }
-
-  connect (opts, cb) {
-    const self = this
-
-    this.Lightning.listPeers({}, function (err, res) {
-      if (err) return cb(err)
-
-      if (res.peers.findIndex(peer => peer.pub_key === opts.id) >= 0) return cb()
-
-      const nodeAddress = {
-        pubkey: opts.id,
-        host: opts.address
-      }
-
-      const request = {
-        addr: nodeAddress,
-        perm: true
-      }
-
-      self.Lightning.connectPeer(request, cb)
-    })
   }
 
   subscription (filter, paymentInfo) {
@@ -179,57 +164,6 @@ module.exports = class Payment {
 
       cb(null, invoice)
     })
-  }
-
-  payInvoice (paymentRequest, cb) {
-    const self = this
-    if (!cb) cb = noop
-
-    this.Lightning.decodePayReq({
-      pay_req: paymentRequest
-    }, function (err, details) {
-      if (err) return cb(err)
-
-      // invoice verification logic
-      const [label, info] = details.description.split(':')
-
-      if (label !== 'dazaar') return fail()
-
-      const [seller, buyer] = info.trim().split(' ')
-
-      const invoice = {
-        buyer,
-        seller,
-        amount: parseInt(details.num_satoshis)
-      }
-
-      const index = self.requests.findIndex(matchRequest(invoice))
-      if (index === -1) return fail()
-
-      self.requests.splice(index, 1)
-
-      const call = self.Lightning.sendPayment()
-      call.write({
-        payment_request: paymentRequest
-      })
-
-      call.on('data', function (payment) {
-        if (payment.payment_error === '') return cb(null, payment)
-        return cb(new Error(payment.payment_error))
-      })
-    })
-
-    function fail () {
-      return cb(new Error('unrecognised invoice'))
-    }
-
-    function matchRequest (inv) {
-      return req => {
-        return req.buyer === inv.buyer &&
-          req.seller === inv.seller &&
-          req.amount === inv.amount
-      }
-    }
   }
 
   earnings () {
