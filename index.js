@@ -17,10 +17,10 @@ module.exports = class Payment extends EventEmitter {
     this.subscribers = new Map()
 
     this.nodeInfo = {}
-    this.nodeInfo.address = opts.address
+    this.nodeInfo.address = opts.address || null
     this.supports = this.constructor.supports
 
-    this._setupExtensions()
+    this._setupExtensions(opts.oninvoice)
   }
 
   initMaybe (cb) {
@@ -81,6 +81,7 @@ module.exports = class Payment extends EventEmitter {
   }
 
   sell (request, buyerKey, cb) {
+    if (this.lightning === null) return cb(new Error('No lightning node connected, only buy permitted.'))
     if (!cb) cb = noop
     const self = this
 
@@ -135,7 +136,7 @@ module.exports = class Payment extends EventEmitter {
     }
   }
 
-  _setupExtensions () {
+  _setupExtensions (oninvoice) {
     const self = this
     this.dazaar.receive('lnd-pay-request', function (request, stream) {
       self.sell(request, stream.remotePublicKey, function (err, invoice) {
@@ -144,8 +145,7 @@ module.exports = class Payment extends EventEmitter {
       })
     })
 
-    this.dazaar.receive('lnd-invoice', function (invoice) {
-    })
+    this.dazaar.receive('lnd-invoice', oninvoice)
   }
 
   static supports (payment) {
@@ -158,7 +158,7 @@ function node (opts) {
   if (opts.implementation === 'lnd') return new Lnd(opts)
   if (opts.implementation === 'c-lightning') return new CLightning(opts)
 
-  throw new Error('unrecognised lightning node: specify lnd or c-lightning.')
+  return null
 }
 
 function noop () {}

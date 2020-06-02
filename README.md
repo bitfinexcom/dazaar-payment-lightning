@@ -5,15 +5,16 @@ Lightning payment api for Dazaar stream services
 ### Options
 ```js
 const lightningOpts = {
-  lnddir: ..., // data directory of the lightning node
-  rpcPort: ..., // only needed for LND
-  address: ..., // format <host>:<port>
+  cert: ..., // base64 encoded string of tls.cert
+  macaroon: ..., // base64 encoded string of macaroon
   network: ..., // mainnet / testnet / regtest
-  implementation: ... // 'c-lightning' or 'lnd'
+  implementation: ..., // 'c-lightning' or 'lnd'
+  oninvoice: function (invoice) {
+    // handle incoming invoice, e.g. display as QR
+  }
 }
 
 const paymentCard = {
-  payto: 'dazaartest22',
   currency: 'LightningBTC', // may also be LightningSats
   amount: '0.002',
   unit: 'hours',
@@ -55,23 +56,24 @@ On a separate machine with the
 const buyer = m.buy(seller.key)
 
 // set up pay payment linked to the buyer
-const payment = new Payment(buyer, lightningOpts)
+const payment = new Payment(buyer, null, lightningOpts)
 
 // buy an amount of feed
-payment..buy(800, cb)
+payment.buy(800) // oninvoice handles response
 ```
 
 ## API
-### Seller
-#### `const payment = Seller(seller, payment, options)`
+#### `const payment = Payment(seller, payment, options)`
 Create a new lightning payment instance associated to a seller. `seller` should be a dazaar seller instance, `payment` may either be a dazaar payment card, or a string specifying the per second rate in either `BTC` or `Sats`, such as `200 Sats/s`. Options include:
 ```js
 {
-  lnddir: ..., // data directory of the lightning node
-  rpcPort: ..., // only needed for LND
-  address: ..., // format <host>:<port>
+  cert: ..., // base64 encoded string of tls.cert
+  macaroon: ..., // base64 encoded string of macaroon
   network: ..., // mainnet / testnet / regtest
-  implementation: ... // 'c-lightning' or 'lnd'
+  implementation: ..., // 'c-lightning' or 'lnd'
+  oninvoice: function (invoice) {
+    // handle incoming invoice, e.g. display as QR
+  }
 }
 ```
 
@@ -81,12 +83,8 @@ A seller can validate the time left for a given buyer. Returns `error` if there 
 #### `payment.destroy()`
 Destroy the payment provider
 
-### Buyer
-#### `const payment = Buyer(buyer, options)`
-Create a new lightning payment instance associated to a buyer. `buyer` should be a dazaar buyer instance. Options are the same as above.
-
-#### `payment.buy(amount, cb)`
-Pay a specified amount for the stream that this buyer is registered to. `amount` is specified in satoshis (1 x 10<sup>-8</sup> BTC). Because a new buyer is instatiated for each stream, there is no need to specify more than the amount to be purchased.
+#### `payment.buy(amount)`
+Request a specified amount for the stream that this buyer is registered to. `amount` is specified in satoshis (1 x 10<sup>-8</sup> BTC). The invoice is passed to the user so there is no need for a lightning node to be connected in order to call this API. `oninvoice` handles the returned invoice, which is passed to the constructor.
 
 #### `payment.destroy()`
 Destroy the payment provider
