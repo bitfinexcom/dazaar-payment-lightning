@@ -1,4 +1,4 @@
-const LndGrpc = require('grpc-lnd')
+const LndGrpc = require('lnd-grpc')
 const clerk = require('payment-tracker')
 const { EventEmitter } = require('events')
 
@@ -6,30 +6,75 @@ process.env.GRPC_SSL_CIPHER_SUITES = 'HIGH+ECDSA'
 
 module.exports = class Payment {
   constructor (opts) {
-    this.client = LndGrpc(opts)
-    this.invoiceStream = this.client.subscribeInvoices({})
+    this.client = new LndGrpc(opts)
+    this.invoiceStream = null
+
+    this.initialized = false
+
+    this.Invoices = null
+    this.Lightning = null
+    this.WalletUnlocker = null
 
     this.requests = []
+
+    this.client.on('locked', async () => {
+      const password = await opts.unlock()
+      await this.unlock(password)
+    })
+  }
+
+  async _init (cb) {
+    await this.client.connect()
+
+    const { Lightning, Invoices, WalletUnlocker } = this.client.services
+
+    this.Invoices = Invoices
+    this.Lightning = Lightning
+    this.WalletUnlocker = WalletUnlocker
+
+    this.invoiceStream = await this.Lightning.subscribeInvoices({})
+
+    cb()
+  }
+
+  init (cb) {
+    if (this.initialized) return this.initialized
+    this.initialized =  this._init(cb)
+  }
+
+  async unlock (password) {
+    assert(this.client.state === 'locked', 'expected wallet to be locked')
+
+    await WalletUnlocker.unlockWallet({
+      wallet_password: Buffer.from(password)
+    })
+
+    return WalletUnlocker.activateLightning()
   }
 
   getNodeId (cb) {
-    this.client.getInfo({}, function (err, res) {
+    this.Lightning.getInfo({}, function (err, res) {
       if (err) return cb(err)
       cb(null, res.identity_pubkey)
     })
   }
 
+  destroy () {
+    this.requests = []
+    this.client.disconnect()
+  }
+
   connect (opts, cb) {
     const self = this
 
-    this.client.listPeers({}, function (err, res) {
+    this.Lightning.listPeers({}, function (err, res) {
       if (err) return cb(err)
 
-      if (res.peers.indexOf(peer => peer.pub_key === opts.id) >= 0) return cb()
+      if (res.peers.findIndex(peer => peer.pub_key === opts.id) >= 0) return cb()
 
       const nodeAddress = {
         pubkey: opts.id,
-        address: opts.address
+        host: opts.address
       }
 
       const request = {
@@ -37,7 +82,7 @@ module.exports = class Payment {
         perm: true
       }
 
-      self.client.connectPeer(request, cb)
+      self.Lightning.connectPeer(request, cb)
     })
   }
 
@@ -95,7 +140,7 @@ module.exports = class Payment {
       var num_max_invoices = Number.MAX_SAFE_INTEGER
       var reversed = true
 
-      self.client.listInvoices({ num_max_invoices, reversed }, function (err, res) {
+      self.Lightning.listInvoices({ num_max_invoices, reversed }, function (err, res) {
         // CHECK: error handling
         if (err) {
           sub.destroy()
@@ -121,7 +166,7 @@ module.exports = class Payment {
   addInvoice (filter, amount, cb) {
     if (!cb) cb = noop
 
-    this.client.addInvoice({
+    this.Lightning.addInvoice({
       memo: filter,
       value: amount
     }, function (err, res) {
@@ -140,7 +185,7 @@ module.exports = class Payment {
     const self = this
     if (!cb) cb = noop
 
-    this.client.decodePayReq({
+    this.Lightning.decodePayReq({
       pay_req: paymentRequest
     }, function (err, details) {
       if (err) return cb(err)
@@ -163,7 +208,7 @@ module.exports = class Payment {
 
       self.requests.splice(index, 1)
 
-      const call = self.client.sendPayment()
+      const call = self.Lightning.sendPayment()
       call.write({
         payment_request: paymentRequest
       })

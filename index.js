@@ -28,51 +28,62 @@ module.exports = class Payment extends EventEmitter {
 
     if (this.nodeInfo.id) return cb()
 
-    this.lightning.getNodeId(function (err, nodeId) {
+    this.lightning.init((err) => {
       if (err) return cb(err)
-      self.nodeInfo.id = nodeId
-      cb()
+
+      this.lightning.getNodeId(function (err, nodeId) {
+        if (err) return cb(err)
+        self.nodeInfo.id = nodeId
+        cb()
+      })
     })
   }
 
   validate (buyerKey, cb) {
     if (this.destroyed) return process.nextTick(cb, new Error('Seller is shutting down'))
-    const tail = this._get(buyerKey)
 
-    const timeout = setTimeout(ontimeout, 20000)
-    let timedout = false
-    if (tail.synced || tail.active()) return process.nextTick(onsynced)
+    this.lightning.init((err) => {
+      if (err) return cb(err)
 
-    tail.on('synced', onsynced)
-    tail.on('update', onupdate)
+      const tail = this._get(buyerKey)
 
-    function ontimeout () {
-      timedout = true
-      onsynced()
-    }
+      const timeout = setTimeout(ontimeout, 20000)
+      let timedout = false
+      if (tail.synced || tail.active()) return process.nextTick(onsynced)
 
-    function onupdate () {
-      if (tail.active()) onsynced()
-    }
+      tail.on('synced', onsynced)
+      tail.on('update', onupdate)
 
-    function onsynced () {
-      tail.removeListener('synced', onsynced)
-      tail.removeListener('update', onupdate)
-      clearTimeout(timeout)
+      function ontimeout () {
+        timedout = true
+        onsynced()
+      }
 
-      const time = tail.remainingTime()
+      function onupdate () {
+        if (tail.active()) onsynced()
+      }
 
-      if (time <= 0) return cb(new Error('No time left on subscription' + (timedout ? 'after timeout' : '')))
+      function onsynced () {
+        tail.removeListener('synced', onsynced)
+        tail.removeListener('update', onupdate)
+        clearTimeout(timeout)
 
-      cb(null, {
-        type: 'time',
-        remaining: time
-      })
-    }
+        const time = tail.remainingTime()
+
+        if (time <= 0) return cb(new Error('No time left on subscription' + (timedout ? 'after timeout' : '')))
+
+        cb(null, {
+          type: 'time',
+          remaining: time
+        })
+      }
+    })
   }
 
   connect (opts, cb) {
-    this.lightning.connect(opts.buyerInfo, cb)
+    this.initMaybe(() => {
+      this.lightning.connect(opts.buyerInfo, cb)
+    })
   }
 
   sell (request, buyerKey, cb) {
@@ -124,6 +135,8 @@ module.exports = class Payment extends EventEmitter {
     for (const tail of this.subscribers.values()) {
       tail.destroy()
     }
+
+    this.lightning.destroy()
   }
 
   _filter (key, seller = true) {
