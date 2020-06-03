@@ -171,6 +171,22 @@ module.exports = class Payment {
     })
   }
 
+  payInvoice (paymentRequest, cb) {
+    if (!cb) cb = noop
+
+    const call = self.Lightning.sendPayment()
+
+    call.write({
+      payment_request: paymentRequest
+    })
+
+    call.on('data', function (payment) {
+      if (payment.payment_error === '') return cb(null, payment)
+      return cb(new Error(payment.payment_error))
+    })
+  }
+
+
   earnings () {
     const earnings = {}
     for (const user of this.users) {

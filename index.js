@@ -115,19 +115,11 @@ module.exports = class Payment extends EventEmitter {
     })
   }
 
-  buy (seller, amount, auth, cb) {
-    const self = this
-
-    // this.initMaybe(oninit)
-    oninit()
-
-    function oninit (err) {
+  buy (amount, cb) {
+    this.requestInvoice(amount, (err, req) => {
       if (err) return cb(err)
-
-      self.dazaar.broadcast('lnd-pay-request', { amount })
-
-      cb()
-    }
+      this.lightning.payInvoice(req, cb)
+    })
   }
 
   destroy () {
