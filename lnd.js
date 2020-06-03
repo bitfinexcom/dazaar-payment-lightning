@@ -8,10 +8,10 @@ process.env.GRPC_SSL_CIPHER_SUITES = 'HIGH+ECDSA'
 module.exports = class Payment {
   constructor (opts) {
     opts.lndconnectUri = lndconnect.encode({
-      cert: Buffer.from(opts.cert, 'base64').toString('hex'),
-      macaroon: Buffer.from(opts.cert, 'base64').toString(),
+      cert: Buffer.from(opts.cert, 'base64'),
+      macaroon: Buffer.from(opts.macaroon, 'base64'),
       host: opts.host
-    }
+    })
 
     this.client = new LndGrpc(opts)
     this.invoiceStream = null
@@ -31,7 +31,11 @@ module.exports = class Payment {
   }
 
   async _init (cb) {
-    await this.client.connect()
+    try {
+      await this.client.connect()
+    } catch (err) {
+      return cb(err)
+    }
 
     const { Lightning, Invoices, WalletUnlocker } = this.client.services
 
@@ -136,7 +140,7 @@ module.exports = class Payment {
         const dazaarPayments = res.invoices
           .filter(invoice => invoice.settled && invoice.memo === filter)
 
-        const payments = dazaarPayments.forEach(payment => 
+        const payments = dazaarPayments.forEach(payment =>
           account.add({
             amount: parseInt(payment.value),
             time: parseInt(payment.settle_date) * 1000
