@@ -1,3 +1,4 @@
+const invoices = require('invoices')
 const Lnd = require('./lnd')
 const CLightning = require('./c-lightning')
 const metadata = require('./metadata')
@@ -8,19 +9,36 @@ const MAX_SUBSCRIBER_CACHE = 500
 module.exports = class Payment extends EventEmitter {
   constructor (dazaar, payment, opts = {}) {
     super()
-    
+
     this.dazaar = dazaar
     this.payment = payment
 
     this.destroyed = false
     this.lightning = node(opts)
     this.subscribers = new Map()
+    this._requests = []
 
     this.nodeInfo = {}
     this.nodeInfo.address = opts.address || null
     this.supports = this.constructor.supports
 
-    this._setupExtensions(opts.oninvoice)
+    const self = this
+
+    this._setupExtensions(function oninvoice (invRaw) {
+      const inv = invoices.parsePaymentRequest(invRaw)
+
+      for (let i = 0; i < self._requests.length; i++) {
+        const { amount, description, cb } = self._requests[i]
+
+        if (amount === inv.tokens && description === inv.description) {
+          self._requests.splice(i, 1)
+          cb(null, invRaw, inv)
+          return
+        }
+      }
+
+      if (opts.oninvoice) opts.oninvoice(invRaw, inv)
+    })
   }
 
   initMaybe (cb) {
@@ -88,15 +106,25 @@ module.exports = class Payment extends EventEmitter {
     self.lightning.addInvoice(self._filter(buyerKey), request.amount, cb)
   }
 
+  requestInvoice (amount, cb) {
+    this.dazaar.ready((err) => {
+      if (err) return cb(err)
+      if (this.destroyed) return cb(new Error('Destroyed'))
+      this._requests.push({ amount, description: 'dazaar: ' + this.dazaar.seller.toString('hex') + ' ' + this.dazaar.key.toString('hex'), cb })
+      this.dazaar.broadcast('lnd-pay-request', { amount })
+    })
+  }
+
   buy (seller, amount, auth, cb) {
     const self = this
 
-    this.initMaybe(oninit)
+    // this.initMaybe(oninit)
+    oninit()
 
     function oninit (err) {
       if (err) return cb(err)
 
-      self.dazaar.broadcast('lnd-pay-request', amount)
+      self.dazaar.broadcast('lnd-pay-request', { amount })
 
       cb()
     }
@@ -111,6 +139,13 @@ module.exports = class Payment extends EventEmitter {
     }
 
     this.lightning.destroy()
+
+    const requests = this._requests
+    this._requests = []
+
+    for (const { cb } of requests) {
+      cb(new Error('Destroyed'))
+    }
   }
 
   _filter (key, seller = true) {
