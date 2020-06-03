@@ -30,12 +30,8 @@ module.exports = class Payment {
     })
   }
 
-  async _init (cb) {
-    try {
-      await this.client.connect()
-    } catch (err) {
-      return cb(err)
-    }
+  async _init () {
+    await this.client.connect()
 
     const { Lightning, Invoices, WalletUnlocker } = this.client.services
 
@@ -44,13 +40,18 @@ module.exports = class Payment {
     this.WalletUnlocker = WalletUnlocker
 
     this.invoiceStream = await this.Lightning.subscribeInvoices({})
-
-    cb()
   }
 
-  init (cb) {
-    if (this.initialized) return this.initialized
-    this.initialized =  this._init(cb)
+  async init (cb) {
+    if (!this.initialized) this.initialized = this._init()
+
+    try {
+      await this.initialized
+    } catch (err) {
+      return process.nextTick(cb, err)
+    }
+
+    process.nextTick(cb, null)
   }
 
   async unlock (password) {
