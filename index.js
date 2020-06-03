@@ -115,7 +115,10 @@ module.exports = class Payment extends EventEmitter {
     })
   }
 
-  buy (amount, cb) {
+  buy (seller, amount, auth, cb) {
+    if (typeof seller === 'number') return this.buy(null, seller, amount, auth)
+    if (typeof auth === 'function') return this.buy(null, amount, null, auth)
+
     this.requestInvoice(amount, (err, req) => {
       if (err) return cb(err)
       this.lightning.payInvoice(req, cb)
