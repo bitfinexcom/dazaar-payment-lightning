@@ -80,11 +80,14 @@ Create a new lightning payment instance associated to a seller. `seller` should 
 #### `payment.validate(buyerKey, cb)`
 A seller can validate the time left for a given buyer. Returns `error` if there is no time left on the subscription. The method shall check whether the given buyer has a subscription set-up and instantiate one not already present.
 
-#### `payment.destroy()`
-Destroy the payment provider
-
-#### `payment.buy(amount)`
+#### `payment.requestInvoice(amount, cb)`
 Request a specified amount for the stream that this buyer is registered to. `amount` is specified in satoshis (1 x 10<sup>-8</sup> BTC). The invoice is passed to the user so there is no need for a lightning node to be connected in order to call this API. `oninvoice` handles the returned invoice, which is passed to the constructor.
+
+#### `payment.sell(request, buyerKey, cb)`
+Serve an invoice for a given `request`. For this to be called it is required that a lightning node is connected with at least `invoice.macaroon` provided.
+
+#### `payment.buy(seller, amount, auth,cb)`
+`seller` and `auth` should be passed as `null`. Request an invoice and pay it upon receipt. For this to be called it is required that a lightning node is connected with `admin.macaroon` provided.
 
 #### `payment.destroy()`
 Destroy the payment provider
