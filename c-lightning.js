@@ -154,51 +154,15 @@ module.exports = class Payment {
   }
 
   payInvoice (paymentRequest, cb) {
-    const self = this
     if (!cb) cb = noop
 
-    self.client.decodepay(paymentRequest)
-      .then(res => {
-        const details = res.result
+    self.client.pay(paymentRequest)
+      .then(payment => {
+        if (payment.error) return cb(new Error(payment.error.message))
 
-        const [label, info] = details.description.split(':')
-
-        if (label !== 'dazaar') return fail()
-
-        const [seller, buyer] = info.trim().split(' ')
-
-        const invoice = {
-          buyer,
-          seller,
-          amount: parseInt(details.msatoshi) / 1000
-        }
-
-        const index = self.requests.findIndex(matchRequest(invoice))
-        if (index === -1) return fail()
-
-        self.requests.splice(index, 1)
-
-        self.client.pay(paymentRequest)
-          .then(payment => {
-            if (payment.error) return cb(new Error(payment.error.message))
-
-            cb(null, payment)
-          })
-          .catch(err => cb(err))
+        cb(null, payment)
       })
       .catch(err => cb(err))
-
-    function fail () {
-      return cb(new Error('unrecognised invoice'))
-    }
-
-    function matchRequest (inv) {
-      return req => {
-        return req.buyer === inv.buyer &&
-          req.seller === inv.seller &&
-          req.amount === inv.amount
-      }
-    }
   }
 }
 
