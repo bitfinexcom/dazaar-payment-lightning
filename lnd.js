@@ -1,4 +1,5 @@
-const LndGrpc = require('grpc-lnd')
+const LndGrpc = require('lnd-grpc')
+const lndconnect = require('lndconnect')
 const clerk = require('payment-tracker')
 const { EventEmitter } = require('events')
 
@@ -6,39 +7,73 @@ process.env.GRPC_SSL_CIPHER_SUITES = 'HIGH+ECDSA'
 
 module.exports = class Payment {
   constructor (opts) {
-    this.client = LndGrpc(opts)
-    this.invoiceStream = this.client.subscribeInvoices({})
+    opts.lndconnectUri = lndconnect.encode({
+      cert: Buffer.from(opts.cert, 'base64'),
+      macaroon: Buffer.from(opts.macaroon, 'base64'),
+      host: opts.host
+    })
+
+    this.client = new LndGrpc(opts)
+    this.invoiceStream = null
+
+    this.initialized = false
+
+    this.Invoices = null
+    this.Lightning = null
+    this.WalletUnlocker = null
 
     this.requests = []
+
+    this.client.on('locked', async () => {
+      const password = await opts.unlock()
+      await this.unlock(password)
+    })
+  }
+
+  async _init () {
+    await this.client.connect()
+
+    const { Lightning, Invoices, WalletUnlocker } = this.client.services
+
+    this.Invoices = Invoices
+    this.Lightning = Lightning
+    this.WalletUnlocker = WalletUnlocker
+
+    this.invoiceStream = await this.Lightning.subscribeInvoices({})
+  }
+
+  async init (cb) {
+    if (!this.initialized) this.initialized = this._init()
+
+    try {
+      await this.initialized
+    } catch (err) {
+      return process.nextTick(cb, err)
+    }
+
+    process.nextTick(cb, null)
+  }
+
+  async unlock (password) {
+    assert(this.client.state === 'locked', 'expected wallet to be locked')
+
+    await WalletUnlocker.unlockWallet({
+      wallet_password: Buffer.from(password)
+    })
+
+    return WalletUnlocker.activateLightning()
   }
 
   getNodeId (cb) {
-    this.client.getInfo({}, function (err, res) {
+    this.Lightning.getInfo({}, function (err, res) {
       if (err) return cb(err)
       cb(null, res.identity_pubkey)
     })
   }
 
-  connect (opts, cb) {
-    const self = this
-
-    this.client.listPeers({}, function (err, res) {
-      if (err) return cb(err)
-
-      if (res.peers.indexOf(peer => peer.pub_key === opts.id) >= 0) return cb()
-
-      const nodeAddress = {
-        pubkey: opts.id,
-        address: opts.address
-      }
-
-      const request = {
-        addr: nodeAddress,
-        perm: true
-      }
-
-      self.client.connectPeer(request, cb)
-    })
+  destroy () {
+    this.requests = []
+    this.client.disconnect()
   }
 
   subscription (filter, paymentInfo) {
@@ -95,7 +130,7 @@ module.exports = class Payment {
       var num_max_invoices = Number.MAX_SAFE_INTEGER
       var reversed = true
 
-      self.client.listInvoices({ num_max_invoices, reversed }, function (err, res) {
+      self.Lightning.listInvoices({ num_max_invoices, reversed }, function (err, res) {
         // CHECK: error handling
         if (err) {
           sub.destroy()
@@ -106,7 +141,7 @@ module.exports = class Payment {
         const dazaarPayments = res.invoices
           .filter(invoice => invoice.settled && invoice.memo === filter)
 
-        const payments = dazaarPayments.forEach(payment => 
+        const payments = dazaarPayments.forEach(payment =>
           account.add({
             amount: parseInt(payment.value),
             time: parseInt(payment.settle_date) * 1000
@@ -121,7 +156,7 @@ module.exports = class Payment {
   addInvoice (filter, amount, cb) {
     if (!cb) cb = noop
 
-    this.client.addInvoice({
+    this.Lightning.addInvoice({
       memo: filter,
       value: amount
     }, function (err, res) {
@@ -137,55 +172,20 @@ module.exports = class Payment {
   }
 
   payInvoice (paymentRequest, cb) {
-    const self = this
     if (!cb) cb = noop
 
-    this.client.decodePayReq({
-      pay_req: paymentRequest
-    }, function (err, details) {
-      if (err) return cb(err)
+    const call = self.Lightning.sendPayment()
 
-      // invoice verification logic
-      const [label, info] = details.description.split(':')
-
-      if (label !== 'dazaar') return fail()
-
-      const [seller, buyer] = info.trim().split(' ')
-
-      const invoice = {
-        buyer,
-        seller,
-        amount: parseInt(details.num_satoshis)
-      }
-
-      const index = self.requests.findIndex(matchRequest(invoice))
-      if (index === -1) return fail()
-
-      self.requests.splice(index, 1)
-
-      const call = self.client.sendPayment()
-      call.write({
-        payment_request: paymentRequest
-      })
-
-      call.on('data', function (payment) {
-        if (payment.payment_error === '') return cb(null, payment)
-        return cb(new Error(payment.payment_error))
-      })
+    call.write({
+      payment_request: paymentRequest
     })
 
-    function fail () {
-      return cb(new Error('unrecognised invoice'))
-    }
-
-    function matchRequest (inv) {
-      return req => {
-        return req.buyer === inv.buyer &&
-          req.seller === inv.seller &&
-          req.amount === inv.amount
-      }
-    }
+    call.on('data', function (payment) {
+      if (payment.payment_error === '') return cb(null, payment)
+      return cb(new Error(payment.payment_error))
+    })
   }
+
 
   earnings () {
     const earnings = {}

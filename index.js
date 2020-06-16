@@ -1,3 +1,4 @@
+const invoices = require('invoices')
 const Lnd = require('./lnd')
 const CLightning = require('./c-lightning')
 const metadata = require('./metadata')
@@ -8,19 +9,36 @@ const MAX_SUBSCRIBER_CACHE = 500
 module.exports = class Payment extends EventEmitter {
   constructor (dazaar, payment, opts = {}) {
     super()
-    
+
     this.dazaar = dazaar
     this.payment = payment
 
     this.destroyed = false
     this.lightning = node(opts)
     this.subscribers = new Map()
+    this._requests = []
 
     this.nodeInfo = {}
-    this.nodeInfo.address = opts.address
+    this.nodeInfo.address = opts.address || null
     this.supports = this.constructor.supports
 
-    this._setupExtensions()
+    const self = this
+
+    this._setupExtensions(function oninvoice (invRaw) {
+      const inv = invoices.parsePaymentRequest(invRaw)
+
+      for (let i = 0; i < self._requests.length; i++) {
+        const { amount, description, cb } = self._requests[i]
+
+        if (amount === inv.tokens && description === inv.description) {
+          self._requests.splice(i, 1)
+          cb(null, invRaw, inv)
+          return
+        }
+      }
+
+      if (opts.oninvoice) opts.oninvoice(invRaw, inv)
+    })
   }
 
   initMaybe (cb) {
@@ -28,93 +46,83 @@ module.exports = class Payment extends EventEmitter {
 
     if (this.nodeInfo.id) return cb()
 
-    this.lightning.getNodeId(function (err, nodeId) {
+    this.lightning.init((err) => {
       if (err) return cb(err)
-      self.nodeInfo.id = nodeId
-      cb()
+
+      this.lightning.getNodeId(function (err, nodeId) {
+        if (err) return cb(err)
+        self.nodeInfo.id = nodeId
+        cb()
+      })
     })
   }
 
   validate (buyerKey, cb) {
     if (this.destroyed) return process.nextTick(cb, new Error('Seller is shutting down'))
-    const tail = this._get(buyerKey)
 
-    const timeout = setTimeout(ontimeout, 20000)
-    let timedout = false
-    if (tail.synced || tail.active()) return process.nextTick(onsynced)
+    this.lightning.init((err) => {
+      if (err) return cb(err)
 
-    tail.on('synced', onsynced)
-    tail.on('update', onupdate)
+      const tail = this._get(buyerKey)
 
-    function ontimeout () {
-      timedout = true
-      onsynced()
-    }
+      const timeout = setTimeout(ontimeout, 20000)
+      let timedout = false
+      if (tail.synced || tail.active()) return process.nextTick(onsynced)
 
-    function onupdate () {
-      if (tail.active()) onsynced()
-    }
+      tail.on('synced', onsynced)
+      tail.on('update', onupdate)
 
-    function onsynced () {
-      tail.removeListener('synced', onsynced)
-      tail.removeListener('update', onupdate)
-      clearTimeout(timeout)
+      function ontimeout () {
+        timedout = true
+        onsynced()
+      }
 
-      const time = tail.remainingTime()
+      function onupdate () {
+        if (tail.active()) onsynced()
+      }
 
-      if (time <= 0) return cb(new Error('No time left on subscription' + (timedout ? 'after timeout' : '')))
+      function onsynced () {
+        tail.removeListener('synced', onsynced)
+        tail.removeListener('update', onupdate)
+        clearTimeout(timeout)
 
-      cb(null, {
-        type: 'time',
-        remaining: time
-      })
-    }
-  }
+        const time = tail.remainingTime()
 
-  connect (opts, cb) {
-    this.lightning.connect(opts.buyerInfo, cb)
+        if (time <= 0) return cb(new Error('No time left on subscription' + (timedout ? 'after timeout' : '')))
+
+        cb(null, {
+          type: 'time',
+          remaining: time
+        })
+      }
+    })
   }
 
   sell (request, buyerKey, cb) {
+    if (this.lightning === null) return cb(new Error('No lightning node connected, only buy permitted.'))
     if (!cb) cb = noop
     const self = this
 
-    this.connect(request, function (err) {
-      if (err && err.code !== 2) return cb(err)
-      self.validate(buyerKey, function (err, res) { // validate is called to initiate subscription
-        self.lightning.addInvoice(self._filter(buyerKey), request.amount, cb)
-      })
+    self.lightning.addInvoice(self._filter(buyerKey), request.amount, cb)
+  }
+
+  requestInvoice (amount, cb) {
+    this.dazaar.ready((err) => {
+      if (err) return cb(err)
+      if (this.destroyed) return cb(new Error('Destroyed'))
+      this._requests.push({ amount, description: 'dazaar: ' + this.dazaar.seller.toString('hex') + ' ' + this.dazaar.key.toString('hex'), cb })
+      this.dazaar.broadcast('lnd-pay-request', { amount })
     })
   }
 
   buy (seller, amount, auth, cb) {
-    const self = this
+    if (typeof seller === 'number') return this.buy(null, seller, amount, auth)
+    if (typeof auth === 'function') return this.buy(null, amount, null, auth)
 
-    this.initMaybe(oninit)
-
-    function oninit (err) {
+    this.requestInvoice(amount, (err, req) => {
       if (err) return cb(err)
-
-      const request = {
-        amount,
-        buyerInfo: self.nodeInfo
-      }
-
-      const expectedInvoice = {
-        amount,
-        buyer: self.dazaar.key.toString('hex'),
-        seller: self.dazaar.seller.toString('hex')
-      }
-
-      self.dazaar.broadcast('lnd-pay-request', request)
-      self.lightning.requests.push(expectedInvoice)
-
-      cb()
-    }
-  }
-
-  pay (invoice, cb) {
-    this.lightning.payInvoice(invoice.request, cb)
+      this.lightning.payInvoice(req, cb)
+    })
   }
 
   destroy () {
@@ -123,6 +131,15 @@ module.exports = class Payment extends EventEmitter {
 
     for (const tail of this.subscribers.values()) {
       tail.destroy()
+    }
+
+    this.lightning.destroy()
+
+    const requests = this._requests
+    this._requests = []
+
+    for (const { cb } of requests) {
+      cb(new Error('Destroyed'))
     }
   }
 
@@ -149,7 +166,7 @@ module.exports = class Payment extends EventEmitter {
     }
   }
 
-  _setupExtensions () {
+  _setupExtensions (oninvoice) {
     const self = this
     this.dazaar.receive('lnd-pay-request', function (request, stream) {
       self.sell(request, stream.remotePublicKey, function (err, invoice) {
@@ -158,11 +175,7 @@ module.exports = class Payment extends EventEmitter {
       })
     })
 
-    this.dazaar.receive('lnd-invoice', function (invoice) {
-      self.pay(invoice, function (err, payment) {
-        if (err) self.emit('error', err)
-      })
-    })
+    this.dazaar.receive('lnd-invoice', oninvoice)
   }
 
   static supports (payment) {
@@ -175,7 +188,7 @@ function node (opts) {
   if (opts.implementation === 'lnd') return new Lnd(opts)
   if (opts.implementation === 'c-lightning') return new CLightning(opts)
 
-  throw new Error('unrecognised lightning node: specify lnd or c-lightning.')
+  return null
 }
 
 function noop () {}

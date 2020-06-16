@@ -9,7 +9,8 @@
   "author": "Christophe Diederichs",
   "license": "ISC",
   "dependencies": {
-    "grpc-lnd": "^1.0.1",
+    "invoices": "^1.0.2",
+    "lnd-grpc": "^0.4.3",
     "payment-tracker": "^0.1.0",
     "unixson": "^1.0.0"
   },

@@ -1,12 +1,17 @@
 const crypto = require('crypto')
+const path = require('path')
 const unixson = require('unixson')
 const clerk = require('payment-tracker')
 const { EventEmitter } = require('events')
 
 module.exports = class Payment {
   constructor (opts) {
-    this.client = unixson(opts.lightningdDir + '/regtest/lightning-rpc')
+    this.client = unixson(path.join(opts.lightningdDir, opts.network) + '/lightning-rpc')
     this.requests = []
+  }
+
+  init (cb) {
+    cb()
   }
 
   getNodeId (cb) {
@@ -34,6 +39,10 @@ module.exports = class Payment {
           .catch(err => cb(err))
       })
       .catch(err => cb(err))
+  }
+
+  destroy () {
+    this.requests = []
   }
 
   subscription (filter, paymentInfo) {
@@ -145,51 +154,15 @@ module.exports = class Payment {
   }
 
   payInvoice (paymentRequest, cb) {
-    const self = this
     if (!cb) cb = noop
 
-    self.client.decodepay(paymentRequest)
-      .then(res => {
-        const details = res.result
+    self.client.pay(paymentRequest)
+      .then(payment => {
+        if (payment.error) return cb(new Error(payment.error.message))
 
-        const [label, info] = details.description.split(':')
-
-        if (label !== 'dazaar') return fail()
-
-        const [seller, buyer] = info.trim().split(' ')
-
-        const invoice = {
-          buyer,
-          seller,
-          amount: parseInt(details.msatoshi) / 1000
-        }
-
-        const index = self.requests.findIndex(matchRequest(invoice))
-        if (index === -1) return fail()
-
-        self.requests.splice(index, 1)
-
-        self.client.pay(paymentRequest)
-          .then(payment => {
-            if (payment.error) return cb(new Error(payment.error.message))
-
-            cb(null, payment)
-          })
-          .catch(err => cb(err))
+        cb(null, payment)
       })
       .catch(err => cb(err))
-
-    function fail () {
-      return cb(new Error('unrecognised invoice'))
-    }
-
-    function matchRequest (inv) {
-      return req => {
-        return req.buyer === inv.buyer &&
-          req.seller === inv.seller &&
-          req.amount === inv.amount
-      }
-    }
   }
 }
 
