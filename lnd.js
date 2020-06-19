@@ -158,7 +158,8 @@ module.exports = class Payment {
 
     this.Lightning.addInvoice({
       memo: filter,
-      value: amount
+      value: amount,
+      private: true
     }, function (err, res) {
       if (err) return cb(err)
 
@@ -185,7 +186,6 @@ module.exports = class Payment {
       return cb(new Error(payment.payment_error))
     })
   }
-
 
   earnings () {
     const earnings = {}

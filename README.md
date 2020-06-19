@@ -8,7 +8,7 @@ const lightningOpts = {
   cert: ..., // base64 encoded string of tls.cert
   macaroon: ..., // base64 encoded string of macaroon
   network: ..., // mainnet / testnet / regtest
-  implementation: ..., // 'c-lightning' or 'lnd'
+  host: ..., // <host>:<port>
   oninvoice: function (invoice) {
     // handle incoming invoice, e.g. display as QR
   }
