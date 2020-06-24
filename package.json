@@ -1,13 +1,13 @@
 {
-  "name": "dazaar-payment-lightning",
+  "name": "@dazaar/payment-lightning",
   "version": "1.1.0",
   "description": "lightning payment api for dazaar stream services",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "author": "Christophe Diederichs",
-  "license": "ISC",
+  "author": "Dazaar Limited",
+  "license": "MIT",
   "dependencies": {
     "invoices": "^1.0.2",
     "lnd-grpc": "^0.4.3",
@@ -16,7 +16,7 @@
   },
   "devDependencies": {
     "dazaar": "github:bitfinexcom/dazaar",
-    "hypercore": "^8.4.0",
+    "hypercore": "^9.3.1",
     "pump": "^3.0.0",
     "tape": "^4.13.2"
   },
