@@ -1,4 +1,4 @@
-# dazaar-payment-lightning
+# @dazaar/payment-lightning
 Lightning payment api for Dazaar stream services
 
 ## Usage
@@ -25,8 +25,8 @@ const paymentCard = {
 
 ### Seller
 ```js
-const Payment = require('dazaar-payment-lightning')
-const market = require('dazaar/market')
+const Payment = require('@dazaar/payment-lightning')
+const market = require('dazaar')
 const hypercore = require('hypercore')
 
 const m = market('./tmp')
