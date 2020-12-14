@@ -189,8 +189,8 @@ function convertDazaarPayment (pay) {
 
   let satoshiAmt
 
-  if (pay.currency === 'LightningSats') satoshiAmt = Number(pay.amount)
-  if (pay.currency === 'LightningBTC') satoshiAmt = toSats(Number(pay.amount))
+  if (pay.currency.toUpperCase() === 'SATS') satoshiAmt = Number(pay.amount)
+  if (pay.currency.toUpperCase() === 'BTC') satoshiAmt = toSats(Number(pay.amount))
 
   const perSecond = satoshiAmt / (Number(pay.interval) * ratio)
   if (!perSecond) throw new Error('Invalid payment info')

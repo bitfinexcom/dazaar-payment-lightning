@@ -179,8 +179,8 @@ module.exports = class Payment extends EventEmitter {
   }
 
   static supports (payment) {
-    const supportedCurrencies = ['LightningBTC', 'LightningSats']
-    return supportedCurrencies.includes(payment.currency)
+    const supported = ['BTC', 'SATS']
+    return payment.method === 'Lightning' && supported.includes(payment.currency.toUpperCase())
   }
 }
 
