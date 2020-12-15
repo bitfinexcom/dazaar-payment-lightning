@@ -1,6 +1,6 @@
 {
   "name": "@dazaar/payment-lightning",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "lightning payment api for dazaar stream services",
   "main": "index.js",
   "scripts": {
