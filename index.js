@@ -11,7 +11,7 @@ module.exports = class Payment extends EventEmitter {
     super()
 
     this.dazaar = dazaar
-    this.payment = payment
+    this.payment = backwardsCompat(payment)
 
     this.destroyed = false
     this.lightning = node(opts)
@@ -179,6 +179,7 @@ module.exports = class Payment extends EventEmitter {
   }
 
   static supports (p) {
+    p = backwardsCompat(p)
     const supported = ['BTC', 'SATS']
     return !!p.currency && (p.method.toLowerCase() === 'lightning' && supported.includes(p.currency.toUpperCase()))
   }
@@ -192,3 +193,17 @@ function node (opts) {
 }
 
 function noop () {}
+
+function backwardsCompat (payment) {
+  if (payment.currency === 'LightningSats') {
+    payment = { ...payment }
+    payment.method = 'Lightning'
+    payment.currency = 'SATS'
+  }
+  if (payment.currency === 'LightningBTC') {
+    payment = { ...payment }
+    payment.method = 'Lightning'
+    payment.currency = 'BTC'
+  }
+  return payment
+}
