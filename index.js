@@ -178,9 +178,9 @@ module.exports = class Payment extends EventEmitter {
     this.dazaar.receive('lnd-invoice', oninvoice)
   }
 
-  static supports (payment) {
-    const supportedCurrencies = ['LightningBTC', 'LightningSats']
-    return supportedCurrencies.includes(payment.currency)
+  static supports (p) {
+    const supported = ['BTC', 'SATS']
+    return !!p.currency && (p.method.toLowerCase() === 'lightning' && supported.includes(p.currency.toUpperCase()))
   }
 }
 

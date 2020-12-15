@@ -15,7 +15,8 @@ const lightningOpts = {
 }
 
 const paymentCard = {
-  currency: 'LightningBTC', // may also be LightningSats
+  method: 'Lightning',
+  currency: 'BTC', // may also be LightningSats
   amount: '0.002',
   unit: 'hours',
   interval: 1,
