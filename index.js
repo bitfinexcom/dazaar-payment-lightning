@@ -101,9 +101,11 @@ module.exports = class Payment extends EventEmitter {
   sell (request, buyerKey, cb) {
     if (this.lightning === null) return cb(new Error('No lightning node connected, only buy permitted.'))
     if (!cb) cb = noop
-    const self = this
 
-    self.lightning.addInvoice(self._filter(buyerKey), request.amount, cb)
+    this.lightning.init((err) => {
+      if (err) return cb(err)
+      this.lightning.addInvoice(this._filter(buyerKey), request.amount, cb)
+    })
   }
 
   requestInvoice (amount, cb) {
@@ -121,7 +123,10 @@ module.exports = class Payment extends EventEmitter {
 
     this.requestInvoice(amount, (err, req) => {
       if (err) return cb(err)
-      this.lightning.payInvoice(req, cb)
+      this.lightning.init((err) => {
+        if (err) return cb(err)
+        this.lightning.payInvoice(req, cb)
+      })
     })
   }
 

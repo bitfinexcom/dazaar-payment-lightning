@@ -2,6 +2,7 @@ const LndGrpc = require('lnd-grpc')
 const lndconnect = require('lndconnect')
 const clerk = require('payment-tracker')
 const { EventEmitter } = require('events')
+const assert = require('assert')
 
 process.env.GRPC_SSL_CIPHER_SUITES = 'HIGH+ECDSA'
 
@@ -57,11 +58,11 @@ module.exports = class Payment {
   async unlock (password) {
     assert(this.client.state === 'locked', 'expected wallet to be locked')
 
-    await WalletUnlocker.unlockWallet({
+    await this.WalletUnlocker.unlockWallet({
       wallet_password: Buffer.from(password)
     })
 
-    return WalletUnlocker.activateLightning()
+    return this.WalletUnlocker.activateLightning()
   }
 
   getNodeId (cb) {
@@ -109,7 +110,7 @@ module.exports = class Payment {
 
     sub.destroy = function () {
       account = null
-      sub.removeListener('data', filterInvoice)
+      self.invoiceStream.removeListener('data', filterInvoice)
     }
 
     return sub
@@ -175,7 +176,7 @@ module.exports = class Payment {
   payInvoice (paymentRequest, cb) {
     if (!cb) cb = noop
 
-    const call = self.Lightning.sendPayment()
+    const call = this.Lightning.sendPayment()
 
     call.write({
       payment_request: paymentRequest
