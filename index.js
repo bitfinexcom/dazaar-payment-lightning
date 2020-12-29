@@ -195,6 +195,8 @@ function node (opts) {
 function noop () {}
 
 function backwardsCompat (payment) {
+  if (!payment) return payment
+
   if (payment.currency === 'LightningSats') {
     payment = { ...payment }
     payment.method = 'Lightning'
