@@ -13,10 +13,21 @@ module.exports = class Payment extends EventEmitter {
     this.dazaar = dazaar
     this.payment = backwardsCompat(payment)
 
+    dazaar.on('peer-add', () => {
+      if (++this._peerCount !== 1) return
+      for (const req of this._requests) {
+        if (req.flushed) continue
+        req.flushed = true
+        dazaar.broadcast('lnd-pay-request', { amount: req.amount })
+      }
+    })
+    dazaar.on('peer-remove', () => this._peerCount--)
+
     this.destroyed = false
     this.lightning = node(opts)
     this.subscribers = new Map()
     this._requests = []
+    this._peerCount = 0
 
     this.nodeInfo = {}
     this.nodeInfo.address = opts.address || null
@@ -112,7 +123,12 @@ module.exports = class Payment extends EventEmitter {
     this.dazaar.ready((err) => {
       if (err) return cb(err)
       if (this.destroyed) return cb(new Error('Destroyed'))
-      this._requests.push({ amount, description: 'dazaar: ' + this.dazaar.seller.toString('hex') + ' ' + this.dazaar.key.toString('hex'), cb })
+      this._requests.push({
+        amount,
+        flushed: this._peerCount > 0,
+        description: 'dazaar: ' + this.dazaar.seller.toString('hex') + ' ' + this.dazaar.key.toString('hex'),
+        cb
+      })
       this.dazaar.broadcast('lnd-pay-request', { amount })
     })
   }
