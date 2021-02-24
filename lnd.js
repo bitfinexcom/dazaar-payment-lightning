@@ -17,17 +17,26 @@ module.exports = class Payment {
     this.client = new LndGrpc(opts)
     this.invoiceStream = null
 
-    this.initialized = false
+    this.initialized = null
 
     this.Invoices = null
     this.Lightning = null
     this.WalletUnlocker = null
 
     this.requests = []
+    this._reset(opts)
+  }
 
+  _reset (opts) {
     this.client.on('locked', async () => {
       const password = await opts.unlock()
       await this.unlock(password)
+    })
+
+    this.client.once('disconnected', () => {
+      this.client = new LndGrpc(opts)
+      this.initialized = null
+      this._reset(opts)
     })
   }
 
@@ -142,7 +151,7 @@ module.exports = class Payment {
         const dazaarPayments = res.invoices
           .filter(invoice => invoice.settled && invoice.memo === filter)
 
-        const payments = dazaarPayments.forEach(payment =>
+        dazaarPayments.forEach(payment =>
           account.add({
             amount: parseInt(payment.value),
             time: parseInt(payment.settle_date) * 1000
