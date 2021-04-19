@@ -35,8 +35,6 @@ module.exports = class Payment extends EventEmitter {
       await this.unlock(password)
     })
 
-    this.client.on('error', console.log)
-
     this.client.once('disconnected', () => {
       this.client = new LndGrpc(opts)
       this.initialized = null
