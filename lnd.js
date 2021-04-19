@@ -1,3 +1,4 @@
+const path = require('path')
 const LndGrpc = require('lnd-grpc')
 const lndconnect = require('lndconnect')
 const clerk = require('payment-tracker')
@@ -6,8 +7,10 @@ const assert = require('assert')
 
 process.env.GRPC_SSL_CIPHER_SUITES = 'HIGH+ECDSA'
 
-module.exports = class Payment {
+module.exports = class Payment extends EventEmitter {
   constructor (opts) {
+    super()
+
     opts.lndconnectUri = lndconnect.encode({
       cert: Buffer.from(opts.cert, 'base64'),
       macaroon: Buffer.from(opts.macaroon, 'base64'),
@@ -33,6 +36,8 @@ module.exports = class Payment {
       await this.unlock(password)
     })
 
+    this.client.on('error', console.log)
+
     this.client.once('disconnected', () => {
       this.client = new LndGrpc(opts)
       this.initialized = null
@@ -49,7 +54,25 @@ module.exports = class Payment {
     this.Lightning = Lightning
     this.WalletUnlocker = WalletUnlocker
 
-    this.invoiceStream = await this.Lightning.subscribeInvoices({})
+    await this._connectInvoiceStream()
+  }
+
+  async _connectInvoiceStream () {
+    try {
+      this.invoiceStream = await this.Lightning.subscribeInvoices({})
+    } catch (e) {
+      setTimeout(() => this._connectInvoiceStream(), 5000)
+      return
+    }
+
+    this.invoiceStream.on('error', console.error)
+    this.invoiceStream.on('data', data => {
+      this.emit('live-invoice', data)
+    })
+
+    this.invoiceStream.on('end', () => {
+      setTimeout(() => this._connectInvoiceStream(), 5000)
+    })
   }
 
   async init (cb) {
@@ -111,7 +134,7 @@ module.exports = class Payment {
     sub.synced = false
     sync()
 
-    self.invoiceStream.on('data', filterInvoice)
+    self.on('live-invoice', filterInvoice)
 
     sub.active = account.active
     sub.remainingTime = account.remainingTime
@@ -119,7 +142,7 @@ module.exports = class Payment {
 
     sub.destroy = function () {
       account = null
-      self.invoiceStream.removeListener('data', filterInvoice)
+      self.removeListener('live-invoice', filterInvoice)
     }
 
     return sub
@@ -186,9 +209,8 @@ module.exports = class Payment {
     if (!cb) cb = noop
 
     const call = this.Lightning.sendPayment()
-
     call.write({
-      payment_request: paymentRequest
+      payment_request: paymentRequest.request
     })
 
     call.on('data', function (payment) {
