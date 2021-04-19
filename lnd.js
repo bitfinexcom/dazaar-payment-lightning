@@ -1,4 +1,3 @@
-const path = require('path')
 const LndGrpc = require('lnd-grpc')
 const lndconnect = require('lndconnect')
 const clerk = require('payment-tracker')
@@ -209,6 +208,7 @@ module.exports = class Payment extends EventEmitter {
     if (!cb) cb = noop
 
     const call = this.Lightning.sendPayment()
+
     call.write({
       payment_request: paymentRequest.request
     })
